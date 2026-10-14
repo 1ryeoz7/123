@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>輸入資料</title>
+</head>
+<body>
+    <h2>您選擇的類別是：{{ category }}</h2>
+    <form action="/calculate" method="POST">
+        <input type="hidden" name="category" value="{{ category }}">
+        
+        {% if category == 'finance_loan' %}
+            <label>請輸入放款金額：</label>
+            <input type="number" name="amount" required>
+        {% elif category == 'insurance_fyp' %}
+            <label>請輸入保費金額 (FYP)：</label>
+            <input type="number" name="premium" required>
+        {% endif %}
+        
+        <br><br>
+        <button type="submit">開始計算與比對</button>
+    </form>
+    <br>
+    <a href="/">返回重新選擇</a>
+</body>
+</html>

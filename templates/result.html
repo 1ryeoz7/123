@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>計算與輸出結果</title>
+</head>
+<body>
+    <h2>處理結果</h2>
+    <p><strong>計算出的評分/數值：</strong> {{ result.score }}</p>
+    <p><strong>判定輸出的資料種類：</strong> <span style="color: red; font-weight: bold;">{{ result.output_type }}</span></p>
+    
+    <hr>
+    <h3>今日套用的市場基準資料：</h3>
+    <ul>
+        <li>利率指標：{{ result.used_market_data.interest_rate }}%</li>
+        <li>匯率：{{ result.used_market_data.exchange_rate }}</li>
+    </ul>
+    
+    <br>
+    <a href="/">回到首頁</a>
+</body>
+</html>
