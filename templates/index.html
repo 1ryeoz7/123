@@ -2,17 +2,20 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>自動化資料處理系統 - 選擇類別</title>
+    <title>保險公司預算分析與預測系統</title>
 </head>
 <body>
-    <h2>請選擇處理類別</h2>
+    <h2>請選擇要進行預算分析的部門</h2>
     <form action="/input" method="POST">
-        <select name="category">
-            <option value="finance_loan">金融放款與利率計算類</option>
-            <option value="insurance_fyp">保險 FYP 與匯率換算類</option>
+        <select name="department" style="padding: 5px; font-size: 16px;">
+            <option value="sales">1. 業務部門 (Driver-based + 迴歸預測)</option>
+            <option value="risk_actuarial">2. 風管與精算部門 (專案成本 + XGBoost 代理模型)</option>
+            <option value="investment">3. 投資管理部門 (Prophet + 總經變數驅動)</option>
+            <option value="support">4. 後勤與內控部門 (Holt-Winters + CPI 通膨調整)</option>
+            <option value="underwriting_claims">5. 核保與理賠部門 (Isolation Forest + 蒙地卡羅模擬)</option>
         </select>
         <br><br>
-        <button type="submit">下一步：輸入資料</button>
+        <button type="submit" style="padding: 8px 16px; font-size: 16px;">下一步：輸入部門參數</button>
     </form>
 </body>
 </html>

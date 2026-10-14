@@ -2,21 +2,16 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>計算與輸出結果</title>
+    <title>預算分析與預測結果</title>
 </head>
 <body>
-    <h2>處理結果</h2>
-    <p><strong>計算出的評分/數值：</strong> {{ result.score }}</p>
-    <p><strong>判定輸出的資料種類：</strong> <span style="color: red; font-weight: bold;">{{ result.output_type }}</span></p>
+    <h2>【{{ department }}】預算分析與 AI 預測結果</h2>
     
     <hr>
-    <h3>今日套用的市場基準資料：</h3>
-    <ul>
-        <li>利率指標：{{ result.used_market_data.interest_rate }}%</li>
-        <li>匯率：{{ result.used_market_data.exchange_rate }}</li>
-    </ul>
+    <h3>核心預測輸出數據：</h3>
+    <pre style="background: #f4f4f4; padding: 15px; border-radius: 5px;">{{ result }}</pre>
     
     <br>
-    <a href="/">回到首頁</a>
+    <a href="/">回到首頁重新選擇部門</a>
 </body>
 </html>

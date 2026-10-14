@@ -2,25 +2,40 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>輸入資料</title>
+    <title>填寫部門預算參數</title>
 </head>
 <body>
-    <h2>您選擇的類別是：{{ category }}</h2>
+    <h2>部門預算參數輸入：{{ department }}</h2>
     <form action="/calculate" method="POST">
-        <input type="hidden" name="category" value="{{ category }}">
+        <input type="hidden" name="department" value="{{ department }}">
         
-        {% if category == 'finance_loan' %}
-            <label>請輸入放款金額：</label>
-            <input type="number" name="amount" required>
-        {% elif category == 'insurance_fyp' %}
-            <label>請輸入保費金額 (FYP)：</label>
-            <input type="number" name="premium" required>
+        {% if department == 'sales' %}
+            <label>預估新契約保費 (FYP)：</label>
+            <input type="number" name="est_fyp" value="50000000" required><br><br>
+            <label>平均佣金率 (FYC%)：</label>
+            <input type="number" step="0.01" name="avg_fyc_rate" value="0.15" required>
+            
+        {% elif department == 'risk_actuarial' %}
+            <label>是否面臨接軌大限 (True/False)：</label>
+            <input type="text" name="is_regulatory_peak" value="True" required>
+            
+        {% elif department == 'investment' %}
+            <label>台美利差預估 (%)：</label>
+            <input type="number" step="0.01" name="interest_spread" value="1.45" required>
+            
+        {% elif department == 'support' %}
+            <label>預測未來期數 (月)：</label>
+            <input type="number" name="forecast_steps" value="1" required>
+            
+        {% elif department == 'underwriting_claims' %}
+            <label>當月理賠營運費用測試值：</label>
+            <input type="number" name="current_month_expense" value="8500000" required>
         {% endif %}
         
         <br><br>
-        <button type="submit">開始計算與比對</button>
+        <button type="submit">開始執行 AI 模型預測與預算比對</button>
     </form>
     <br>
-    <a href="/">返回重新選擇</a>
+    <a href="/">返回首頁重新選擇</a>
 </body>
 </html>
