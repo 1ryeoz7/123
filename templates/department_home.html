@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ dept_name }} - 控制台</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+        .btn { display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 20px; }
+        .btn:hover { background: #218838; }
+        a.back { display: block; margin-top: 15px; color: #666; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>📌 {{ dept_name }} 預算分析專區</h2>
+    <p>歡迎進入 {{ dept_name }}。本模組支援內部成本驅動因子與機器學習/統計模型預測。</p>
+    <p>請點擊下方按鈕開始輸入內部資料與參數，系統將自動結合外部爬蟲市場指標進行 AI 綜合分析。</p>
+    
+    <a href="/dept/{{ dept_id }}/input" class="btn">📝 開始輸入預算資料 (前往頁面 3)</a>
+    <br>
+    <a href="/" class="back">← 返回首頁 (Menu)</a>
+</div>
+</body>
+</html>

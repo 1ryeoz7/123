@@ -2,20 +2,40 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>保險公司預算分析與預測系統</title>
+    <title>保險公司預算分析與決策系統 - 首頁</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
+        h2 { color: #003366; }
+        .market-card { background: #eef9ff; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 5px solid #007bff; }
+        .menu-list { list-style: none; padding: 0; }
+        .menu-list li { margin: 10px 0; }
+        .menu-list a { display: block; padding: 12px 20px; background: #003366; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+        .menu-list a:hover { background: #002244; }
+    </style>
 </head>
 <body>
-    <h2>請選擇要進行預算分析的部門</h2>
-    <form action="/input" method="POST">
-        <select name="department" style="padding: 5px; font-size: 16px;">
-            <option value="sales">1. 業務部門 (Driver-based + 迴歸預測)</option>
-            <option value="risk_actuarial">2. 風管與精算部門 (專案成本 + XGBoost 代理模型)</option>
-            <option value="investment">3. 投資管理部門 (Prophet + 總經變數驅動)</option>
-            <option value="support">4. 後勤與內控部門 (Holt-Winters + CPI 通膨調整)</option>
-            <option value="underwriting_claims">5. 核保與理賠部門 (Isolation Forest + 蒙地卡羅模擬)</option>
-        </select>
-        <br><br>
-        <button type="submit" style="padding: 8px 16px; font-size: 16px;">下一步：輸入部門參數</button>
-    </form>
+<div class="container">
+    <h2>🏢 壽險公司預算分析與 AI 決策中樞 (首頁)</h2>
+    
+    <!-- 頁面 1 上方：目前外部重要資訊 (爬蟲即時抓取) -->
+    <div class="market-card">
+        <h3>📊 即時外部總經與市場指標 (每日自動更新)</h3>
+        <ul>
+            <li>台美利差：<strong>{{ market_data.interest_spread }}%</strong></li>
+            <li>CPI 通膨率：<strong>{{ market_data.cpi * 100 }}%</strong></li>
+            <li>市場 FYP 增長率：<strong>{{ market_data.market_fyp_growth * 100 }}%</strong></li>
+            <li>基準利率：<strong>{{ market_data.interest_rate * 100 }}%</strong></li>
+        </ul>
+    </div>
+
+    <!-- 頁面 1 下方：Menu 選單 (頁面 2 的入口) -->
+    <h3>📂 部門導覽 Menu</h3>
+    <ul class="menu-list">
+        {% for dept_id, dept_name in depts.items() %}
+            <li><a href="/dept/{{ dept_id }}">👉 進入 {{ dept_name }} 預算控制台</a></li>
+        {% endfor %}
+    </ul>
+</div>
 </body>
 </html>

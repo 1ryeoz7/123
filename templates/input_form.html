@@ -2,40 +2,60 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>填寫部門預算參數</title>
+    <title>{{ dept_name }} - 資料輸入</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f9f9f9; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+        label { display: block; margin-top: 15px; font-weight: bold; color: #555; }
+        input { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { margin-top: 25px; background: #007bff; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        a { display: inline-block; margin-top: 15px; color: #666; text-decoration: none; }
+    </style>
 </head>
 <body>
-    <h2>部門預算參數輸入：{{ department }}</h2>
-    <form action="/calculate" method="POST">
-        <input type="hidden" name="department" value="{{ department }}">
+<div class="container">
+    <h2>📝 {{ dept_name }} - 內部資料與參數輸入</h2>
+    <form action="/dept/{{ dept_id }}/calculate" method="POST">
         
-        {% if department == 'sales' %}
-            <label>預估新契約保費 (FYP)：</label>
-            <input type="number" name="est_fyp" value="50000000" required><br><br>
-            <label>平均佣金率 (FYC%)：</label>
+        {% if dept_id == 'sales' %}
+            <label>歷史活動支出 (NTD)：</label>
+            <input type="number" name="hist_activity_expense" value="5000000" required>
+            <label>常態運營費用 (NTD)：</label>
+            <input type="number" name="operating_expense" value="2000000" required>
+            <label>預計進場保單件數：</label>
+            <input type="number" name="entry_policies" value="1200" required>
+            <label>平均保單佣金率 (FYC%)：</label>
             <input type="number" step="0.01" name="avg_fyc_rate" value="0.15" required>
-            
-        {% elif department == 'risk_actuarial' %}
+            <label>預估新契約保費 (FYP)：</label>
+            <input type="number" name="est_fyp" value="50000000" required>
+
+        {% elif dept_id == 'risk_actuarial' %}
             <label>是否面臨接軌大限 (True/False)：</label>
             <input type="text" name="is_regulatory_peak" value="True" required>
-            
-        {% elif department == 'investment' %}
-            <label>台美利差預估 (%)：</label>
+            <label>測試即時利率 (%)：</label>
+            <input type="number" step="0.001" name="interest_rate" value="0.028" required>
+
+        {% elif dept_id == 'investment' %}
+            <label>預估 GDP 增長率 (%)：</label>
+            <input type="number" step="0.001" name="gdp_growth" value="0.032" required>
+            <label>預估台美利差 (%)：</label>
             <input type="number" step="0.01" name="interest_spread" value="1.45" required>
-            
-        {% elif department == 'support' %}
+
+        {% elif dept_id == 'support' %}
             <label>預測未來期數 (月)：</label>
             <input type="number" name="forecast_steps" value="1" required>
-            
-        {% elif department == 'underwriting_claims' %}
-            <label>當月理賠營運費用測試值：</label>
+
+        {% elif dept_id == 'underwriting_claims' %}
+            <label>當月理賠營運費用測試值 (NTD)：</label>
             <input type="number" name="current_month_expense" value="8500000" required>
         {% endif %}
         
-        <br><br>
-        <button type="submit">開始執行 AI 模型預測與預算比對</button>
+        <br>
+        <button type="submit">🚀 執行外部資料結合與 AI 分析報告</button>
     </form>
     <br>
-    <a href="/">返回首頁重新選擇</a>
+    <a href="/dept/{{ dept_id }}">← 返回部門首頁</a>
+</div>
 </body>
 </html>

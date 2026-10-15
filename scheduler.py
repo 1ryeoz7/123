@@ -3,9 +3,10 @@ import requests
 
 # 儲存當日讀取的公開資料
 DAILY_MARKET_DATA = {
-    "interest_rate": 1.55,
-    "exchange_rate": 32.5,
-    "fyp_benchmark": 1000000
+    "interest_rate": 0.02,
+    "interest_spread": 1.35,
+    "cpi": 0.021,               
+    "market_fyp_growth": 0.04   
 }
 
 def fetch_daily_public_data():

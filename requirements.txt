@@ -1,0 +1,11 @@
+Flask
+APScheduler
+requests
+pandas
+scikit-learn
+xgboost
+statsmodels
+prophet
+openai
+matplotlib
+gunicorn
