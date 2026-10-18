@@ -2,37 +2,111 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>{{ dept_name }} - AI 決策報告</title>
+    <title>{{ dept_name }} - 預算分析與決策報告</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; }
-        .container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 900px; margin: auto; }
-        h2 { color: #003366; border-bottom: 2px solid #003366; padding-bottom: 10px; }
-        .report-box { background: #fdfefe; border: 1px solid #d1e7dd; padding: 25px; border-radius: 6px; line-height: 1.8; white-space: pre-wrap; font-size: 15px; color: #2c3e50; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; font-size: 13px; }
-        a { display: inline-block; margin-top: 25px; color: #fff; background: #003366; padding: 10px 20px; border-radius: 5px; text-decoration: none; }
-        a:hover { background: #002244; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 30px; color: #333; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        
+        /* 標題與導航 */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #003366; padding-bottom: 15px; margin-bottom: 30px; }
+        .header h2 { color: #003366; margin: 0; }
+        .btn-back { background: #6c757d; color: white; padding: 8px 16px; text-decoration: none; border-radius: 5px; font-size: 0.9em; font-weight: bold; transition: background 0.2s; }
+        .btn-back:hover { background: #5a6268; }
+
+        /* 區塊卡片設計 */
+        .card { background: #fafbfc; border: 1px solid #e1e4e8; border-radius: 8px; padding: 25px; margin-bottom: 25px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.02); }
+        .card h3 { margin-top: 0; color: #003366; font-size: 1.2em; border-bottom: 1px solid #eaecef; padding-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+
+        /* 數字 KPI 表格排版 */
+        .kpi-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .kpi-table th, .kpi-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eaecef; }
+        .kpi-table th { background: #f1f3f5; color: #495057; font-weight: 600; width: 35%; }
+        .kpi-table td { color: #212529; font-weight: 500; }
+        .highlight-budget { color: #007bff; font-weight: bold; font-size: 1.1em; }
+
+        /* 市場快照網格 (Market Snapshot Grid) */
+        .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; margin-top: 15px; }
+        .snapshot-item { background: white; border: 1px solid #d1d5db; border-radius: 6px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .snapshot-label { font-size: 0.85em; color: #6b7280; margin-bottom: 5px; }
+        .snapshot-value { font-size: 1.05em; font-weight: bold; color: #111827; }
+
+        /* AI 建議與決策提示 */
+        .recommendation-box { background: #eef9ff; border-left: 5px solid #007bff; padding: 20px; border-radius: 0 8px 8px 0; margin-top: 15px; }
+        .recommendation-box p { margin: 0; line-height: 1.6; color: #004085; font-weight: 500; }
+
+        /* AI 完整報告區塊 */
+        .report-section { background: #fdfefe; border: 1px dashed #cbd5e1; padding: 20px; border-radius: 8px; margin-top: 15px; line-height: 1.7; white-space: pre-wrap; color: #334155; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h2>📊 {{ dept_name }} - 高階主管 AI 預算決策報告</h2>
-
-    <h3>1. 結合理論與外部爬蟲資料的 AI 智慧分析報告 (五大維度)：</h3>
-    <div class="report-box">{{ report }}</div>
-
-    <hr style="margin: 30px 0;">
-
-    <h3>2. 底層模型運算數據細節：</h3>
-    <pre>{{ result }}</pre>
-
-    {% if dept_id == 'sales' and result.chart_url %}
-        <hr style="margin: 30px 0;">
-        <h3>3. 預算使用率與 AI 預測趨勢圖：</h3>
-        <img src="{{ result.chart_url }}" alt="預算趨勢圖" style="max-width: 100%; border: 1px solid #ccc; border-radius: 5px;">
-    {% endif %}
     
-    <br>
-    <a href="/">🏠 返回首頁 (Menu)</a>
+    <!-- 頁首標題與返回按鈕 -->
+    <div class="header">
+        <h2>📊 {{ dept_name }} - 預算分析與 AI 決策報告</h2>
+        <a href="/dept/{{ dept_id }}/input" class="btn-back">⬅ 重新調整輸入參數</a>
+    </div>
+
+    <!-- 1. 核心預算預測摘要卡片 -->
+    <div class="card">
+        <h3>📌 核心預算預測摘要</h3>
+        <table class="kpi-table">
+            <tr>
+                <th>部門名稱</th>
+                <td>{{ result.department }}</td>
+            </tr>
+            <tr>
+                <th>本年度基礎預算</th>
+                <td>$ {{ "{:,.2f}".format(result.base_budget) }} 千元</td>
+            </tr>
+            <tr>
+                <th>原定基礎成長率</th>
+                <td>{{ "%.2f"|format(result.original_growth_rate * 100) }}%</td>
+            </tr>
+            <tr>
+                <th>市場動態調整後成長率</th>
+                <td>{{ "%.2f"|format(result.adjusted_growth_rate * 100) }}%</td>
+            </tr>
+            <tr>
+                <th>預測未來年度預算</th>
+                <td><span class="highlight-budget">$ {{ "{:,.2f}".format(result.projected_budget) }} 千元</span></td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- 2. 即時市場爬蟲數據快照卡片 -->
+    <div class="card">
+        <h3>🌐 當日即時市場與總經數據快照 (Market Snapshot)</h3>
+        <div class="snapshot-grid">
+            {% if result.market_snapshot %}
+                {% for key, val in result.market_snapshot.items() %}
+                    <div class="snapshot-item">
+                        <div class="snapshot-label">{{ key }}</div>
+                        <div class="snapshot-value">{{ val }}</div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>目前尚無即時市場快照資料。</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 3. AI 決策與預算建議卡片 -->
+    <div class="card">
+        <h3>💡 AI 智能預警與決策建議</h3>
+        <div class="recommendation-box">
+            <p>{{ result.recommendation }}</p>
+        </div>
+    </div>
+
+    <!-- 4. LLM 五大區塊決策報告卡片 -->
+    <div class="card">
+        <h3>📑 執行長級五大區塊決策報告</h3>
+        <div class="report-section">
+            {{ report }}
+        </div>
+    </div>
+
 </div>
 </body>
 </html>

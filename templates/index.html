@@ -7,11 +7,14 @@
         body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
         .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
         h2 { color: #003366; }
-        .market-card { background: #eef9ff; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 5px solid #007bff; }
+        .market-card { background: #eef9ff; padding: 20px; border-radius: 6px; margin-bottom: 25px; border-left: 5px solid #007bff; }
+        .market-card ul { padding-left: 20px; margin: 10px 0 0 0; }
+        .market-card li { margin: 8px 0; color: #333; }
         .menu-list { list-style: none; padding: 0; }
-        .menu-list li { margin: 10px 0; }
-        .menu-list a { display: block; padding: 12px 20px; background: #003366; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+        .menu-list li { margin: 12px 0; }
+        .menu-list a { display: block; padding: 14px 20px; background: #003366; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; transition: background 0.2s; }
         .menu-list a:hover { background: #002244; }
+        .timestamp { font-size: 0.85em; color: #666; margin-top: 10px; font-style: italic; }
     </style>
 </head>
 <body>
@@ -21,12 +24,18 @@
     <!-- 頁面 1 上方：目前外部重要資訊 (爬蟲即時抓取) -->
     <div class="market-card">
         <h3>📊 即時外部總經與市場指標 (每日自動更新)</h3>
+        <p style="font-size: 0.9em; color: #555; margin-bottom: 10px;">以下數據由背景排程每天自動從官方與市場即時爬蟲抓取，供各部門預算模型動態加權運算：</p>
+        
         <ul>
-            <li>台美利差：<strong>{{ market_data.interest_spread }}%</strong></li>
-            <li>CPI 通膨率：<strong>{{ market_data.cpi * 100 }}%</strong></li>
-            <li>市場 FYP 增長率：<strong>{{ market_data.market_fyp_growth * 100 }}%</strong></li>
-            <li>基準利率：<strong>{{ market_data.interest_rate * 100 }}%</strong></li>
+            {% if market_data and market_data.overview %}
+                {% for key, value in market_data.overview.items() %}
+                    <li>{{ key }}：<strong>{{ value }}</strong></li>
+                {% endfor %}
+            {% else %}
+                <li>目前正在背景初始化或同步即時市場爬蟲數據，請稍候重新整理...</li>
+            {% endif %}
         </ul>
+        <div class="timestamp">系統狀態：背景排程連線正常，支援自動快取與防呆備援。</div>
     </div>
 
     <!-- 頁面 1 下方：Menu 選單 (頁面 2 的入口) -->
