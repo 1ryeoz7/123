@@ -35,6 +35,20 @@ class RiskActuarialCalculator:
     data['法規監理與同業風控基準'] = '合規標準正常'
     return data
 
+def safe_float(value, default_value):
+  """安全轉換 float 函式，防止空字串或非法字元引發當機"""
+  try:
+    if value is None or str(value).strip() == '':
+      return default_value
+    return float(value)
+  except (ValueError, TypeError):
+    return default_value
+
+
+# 於計算函式中使用：
+ics_capital_limit_usage = safe_float(
+    user_inputs.get('ics_capital_limit_usage'), 70.0
+)
 
 def calculate_risk_actuarial_budget(user_inputs, market_data):
   calc = RiskActuarialCalculator()

@@ -2,80 +2,92 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ result_data.department }} - 預算預測與 AI 決策報告</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>{{ dept_name }} - AI 預估結果與決策報告</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="bg-light py-5">
-    <div class="container">
-        <!-- 頂部標題與返回按鈕 -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>📊 {{ result_data.department }} - 動態預警與預算報告</h2>
-            <div>
-                <a href="/dept/{{ dept_id }}/input" class="btn btn-outline-primary me-2">✏️ 修改預算與參數</a>
-                <a href="/" class="btn btn-secondary">🏠 返回首頁總覽</a>
-            </div>
-        </div>
+<body>
+    <div class="container" style="max-width: 950px; margin: 30px auto;">
+        <h1>{{ dept_name }} - AI 動態預算與風險決策報告</h1>
+        <a href="{{ url_for('department_input', dept_id=dept_id) }}">⬅ 返回輸入頁面</a>
 
-        <!-- 1. 燈號與預警分數卡片 -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card shadow-sm h-100 border-left-primary">
-                    <div class="card-body">
-                        <h5 class="text-muted">複合預警分數 (Warning Score)</h5>
-                        <h1 class="display-4 fw-bold text-primary">{{ result_data.warning_score }} <span class="fs-4">/ 100 分</span></h1>
-                        <p class="mb-0 mt-2"><strong>當前燈號狀態：</strong> <span class="badge bg-dark fs-6">{{ result_data.warning_level }}</span></p>
-                    </div>
+        <!-- 區塊 1：Warning Score 大數字與燈號卡片 (僅在有算出的部門顯示) -->
+        {% if result.warning_score is defined %}
+        <div class="warning-score-card" style="background: #ffffff; border: 2px solid #0056b3; border-radius: 10px; padding: 20px; margin-top: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="margin: 0; color: #333;">🛡️ 雙向風險動態預警評分 (Warning Score)</h3>
+                    <p style="margin: 5px 0 0 0; color: #666; font-size: 0.9em;">結合外部市場/氣候指標與內部 ICS 資本與營運數據交叉試算</p>
                 </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card shadow-sm h-100">
-                    <div class="card-body">
-                        <h5 class="text-muted">預算預測摘要</h5>
-                        <p class="mb-1"><strong>基準預算總額：</strong> NT$ {{ "{:,.2f}".format(result_data.base_budget) }}</p>
-                        <p class="mb-1"><strong>調整後成長率：</strong> {{ "{:.2%}".format(result_data.adjusted_growth_rate) }}</p>
-                        <p class="mb-0"><strong>預測期末預算：</strong> <span class="text-success fw-bold fs-5">NT$ {{ "{:,.2f}".format(result_data.projected_budget) }}</span></p>
-                    </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 2.5em; font-weight: bold; color: #0056b3;">{{ result.warning_score }}</span>
+                    <span style="font-size: 1.1em; color: #666;"> / 100 分</span>
+                    <div style="font-size: 1.2em; font-weight: bold; margin-top: 4px;">{{ result.status_light }}</div>
                 </div>
             </div>
         </div>
+        {% endif %}
 
-        <!-- 2. 即時市場與總經數據快照 -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">🌐 當日即時市場與總經數據快照 (Market Snapshot)</h5>
+        <!-- 區塊 2：數據試算結果摘要卡片 -->
+        <div class="summary-grid" style="display: flex; gap: 20px; margin-top: 20px;">
+            <div style="flex: 1; background: #eef6ff; padding: 15px; border-radius: 8px; border: 1px solid #b8daff;">
+                <h4 style="margin-top: 0; color: #004085;">基礎編列預算</h4>
+                <p style="font-size: 1.5em; font-weight: bold; margin: 0; color: #004085;">$ {{ result.base_budget }} 千元</p>
             </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    {% for key, val in result_data.market_snapshot.items() %}
-                    <div class="col-md-4">
-                        <div class="p-3 border rounded bg-white shadow-sm">
-                            <span class="text-muted d-block small">{{ key }}</span>
-                            <strong class="fs-5 text-dark">{{ val }}</strong>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
+            <div style="flex: 1; background: #e2f0d9; padding: 15px; border-radius: 8px; border: 1px solid #c3e6cb;">
+                <h4 style="margin-top: 0; color: #155724;">調整後成長率</h4>
+                <p style="font-size: 1.5em; font-weight: bold; margin: 0; color: #155724;">{{ (result.adjusted_growth_rate * 100)|round(2) }} %</p>
+            </div>
+            <div style="flex: 1; background: #fff3cd; padding: 15px; border-radius: 8px; border: 1px solid #ffeba1;">
+                <h4 style="margin-top: 0; color: #856404;">預估動態總預算</h4>
+                <p style="font-size: 1.5em; font-weight: bold; margin: 0; color: #856404;">$ {{ result.projected_budget }} 千元</p>
             </div>
         </div>
 
-        <!-- 3. AI 高階主管決策報告 (5大維度) -->
-        <div class="card shadow-sm mb-4 border-primary">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">🤖 本機 AI 智能預警與決策建議報告 (Ollama / Llama3)</h5>
-                <span class="badge bg-light text-dark">100% 本機資安保障</span>
+        <!-- 區塊 3：雙向數據對照表 (左欄內部 / 右欄外部) -->
+        <div class="snapshots-wrapper" style="display: flex; gap: 20px; margin-top: 20px;">
+            <!-- 左欄：內部營運與精算指標 -->
+            <div style="flex: 1; background: #f8f9fa; padding: 18px; border-radius: 8px; border: 1px solid #dee2e6;">
+                <h4 style="margin-top: 0; color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 8px;">
+                    💼 內部精算與資本指標 (Internal Data)
+                </h4>
+                {% if result.internal_snapshot %}
+                    <ul style="padding-left: 18px; margin-bottom: 0; line-height: 1.8;">
+                        {% for ik, iv in result.internal_snapshot.items() %}
+                            <li><strong>{{ ik }}：</strong> <span style="color: #0056b3; font-weight: bold;">{{ iv }}</span></li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 0;">採用常態內部固定參數執行運算。</p>
+                {% endif %}
             </div>
-            <div class="card-body bg-white">
-                <div class="p-3 rounded bg-light" style="white-space: pre-line; font-size: 1.05rem; line-height: 1.8;">
-{{ ai_report }}
-                </div>
+
+            <!-- 右欄：外部市場與氣候指標 -->
+            <div style="flex: 1; background: #f8f9fa; padding: 18px; border-radius: 8px; border: 1px solid #dee2e6;">
+                <h4 style="margin-top: 0; color: #28a745; border-bottom: 2px solid #28a745; padding-bottom: 8px;">
+                    🌐 外部市場與氣候指標 (External Data)
+                </h4>
+                {% if result.market_snapshot %}
+                    <ul style="padding-left: 18px; margin-bottom: 0; line-height: 1.8;">
+                        {% for mk, mv in result.market_snapshot.items() %}
+                            <li><strong>{{ mk }}：</strong> <span style="color: #28a745; font-weight: bold;">{{ mv }}</span></li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 0;">採用即時備援快照指標執行運算。</p>
+                {% endif %}
             </div>
         </div>
 
-        <!-- 底部操作列 -->
-        <div class="text-center">
-            <a href="/dept/{{ dept_id }}/export_excel" class="btn btn-success btn-lg">📥 一鍵匯出此部門 Excel 報表</a>
+        <!-- 區塊 4：LLM 生成高階主管決策報告 -->
+        <div class="report-section" style="margin-top: 25px; background: #ffffff; padding: 25px; border-radius: 10px; border: 1px solid #ced4da;">
+            <h3 style="margin-top: 0; color: #212529; border-bottom: 2px solid #0056b3; padding-bottom: 10px;">
+                🤖 AI 財務長 (CFO) 與風控長 (CRO) 高階決策報告
+            </h3>
+            <div class="report-content" style="white-space: pre-line; line-height: 1.8; font-size: 1.05em; color: #333;">
+                {{ report }}
+            </div>
         </div>
+
     </div>
 </body>
 </html>
