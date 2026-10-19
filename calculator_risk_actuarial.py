@@ -122,7 +122,7 @@ def calculate_risk_actuarial_budget(user_inputs, market_data):
   base_budget = float(user_inputs.get('base_budget', 50000))
   growth_rate = float(user_inputs.get('growth_rate', 0.05))
 
-  # 內部 1: 精算負債與資金成本曲線壓力 % (預設 3.2%)（最後正式導入企業內部環境時還要改）
+  # 內部 1: 精算負債與資金成本曲線壓力 % (預設 3.2%)（最後正式導入企業內部環境時要改成外部讀取連結）
   actuarial_liability_cost_rate = float(
       user_inputs.get('actuarial_liability_cost_rate', 3.2)
   )
