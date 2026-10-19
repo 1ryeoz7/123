@@ -2,55 +2,123 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>{{ dept_name }} - 輸入預算參數</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ department_name }} - 預算編列與動態預警系統</title>
+    <!-- 引入 Bootstrap 5 樣式 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .border-dashed {
+            border: 2px dashed #6c757d !important;
+        }
+    </style>
 </head>
-<body>
+<body class="bg-light py-5">
     <div class="container">
-        <h1>{{ dept_name }} - 內部預算資料輸入</h1>
-        <a href="{{ url_for('department_home', dept_id=dept_id) }}">⬅ 返回部門首頁</a>
-
-        <div class="content-wrapper" style="display: flex; gap: 30px; margin-top: 20px;">
-            
-            <!-- 左側：使用者輸入表單 (頁面 3) -->
-            <div class="form-section" style="flex: 1;">
-                <form action="{{ url_for('department_calculate', dept_id=dept_id) }}" method="POST">
-                    <div class="form-group">
-                        <label for="base_budget">本年度基礎預算 (千元)：</label>
-                        <input type="number" id="base_budget" name="base_budget" value="50000" required>
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">📊 {{ department_name }} - 預算編列與動態參數設定</h3>
+            </div>
+            <div class="card-body">
+                <!-- 主表單：處理金額修改、新增與送出計算 -->
+                <form id="budgetForm" method="POST" action="">
+                    <!-- 基礎預算與成長率設定 -->
+                    <div class="row g-3 mb-4 p-3 bg-white rounded border">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">基準預算總額 (元)</label>
+                            <input type="number" step="any" class="form-control" name="base_budget" value="{{ base_budget }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">預期成長率 (小數形式，例如 0.05 代表 5%)</label>
+                            <input type="number" step="0.001" class="form-control" name="growth_rate" value="{{ growth_rate }}">
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="growth_rate">部門預期基本成長率 (例如 0.05 代表 5%)：</label>
-                        <input type="text" id="growth_rate" name="growth_rate" value="0.05" required>
+                    <hr>
+
+                    <!-- 現行會計科目與標籤表格 -->
+                    <h5 class="mb-3 text-secondary">現行會計科目與支出種類標籤</h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover align-middle bg-white">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 42%;">會計科目項目</th>
+                                    <th style="width: 25%;">支出種類標籤</th>
+                                    <th style="width: 23%;">現行金額 / 預算上限 (元)</th>
+                                    <th style="width: 10%; text-align: center;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item_name, data in internal_data.items() %}
+                                {% if not item_name.startswith('new_item') %}
+                                <tr>
+                                    <td class="fw-semibold">{{ item_name }}</td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ data.category }}</span>
+                                        <input type="hidden" name="category_{{ item_name }}" value="{{ data.category }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="any" class="form-control" name="{{ item_name }}" value="{{ data.amount }}">
+                                    </td>
+                                    <td class="text-center">
+                                        <!-- 單獨項目的刪除按鈕 -->
+                                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteItem('{{ item_name }}')">
+                                            🗑️ 刪除
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
 
-                    <button type="submit" class="btn-submit" style="margin-top: 15px; padding: 10px 20px;">
-                        開始 AI 預算預測與報告生成 ➔
-                    </button>
+                    <!-- ➕ 新增自訂預算科目與種類標籤區塊 -->
+                    <div class="card border-dashed bg-white mt-4 mb-4 shadow-sm">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0">➕ 新增自訂預算科目與種類標籤</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-5">
+                                    <label class="form-label">新科目名稱</label>
+                                    <input type="text" class="form-control" name="new_item_name" placeholder="例如：專案外包顧問費">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">指定支出種類標籤</label>
+                                    <input type="text" class="form-control" name="new_item_category" placeholder="例如：專業服務費">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">預算金額 (元)</label>
+                                    <input type="number" step="any" class="form-control" name="new_item_amount" placeholder="0">
+                                </div>
+                            </div>
+                            <small class="text-muted mt-2 d-block">提示：填寫後點擊下方按鈕送出，系統會自動將新科目存入 SQLite 資料庫並納入動態運算。</small>
+                        </div>
+                    </div>
+
+                    <!-- 🚀 確認送出與生成報告按鈕區塊 -->
+                    <div class="d-grid gap-2 mb-3">
+                        <button type="submit" class="btn btn-primary btn-lg py-3 fw-bold fs-5">
+                            🚀 確認送出並生成動態預警與 AI 決策報告
+                        </button>
+                        <a href="/" class="btn btn-outline-secondary">返回首頁總覽</a>
+                    </div>
                 </form>
             </div>
-
-            <!-- 右側：即時顯示爬蟲抓取到的外部資料 (新增功能) -->
-            <div class="market-data-sidebar" style="flex: 1; background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #dee2e6;">
-                <h3>📊 今日最新即時爬蟲市場指標</h3>
-                <p style="font-size: 0.9em; color: #666;">以下數據由系統今日自動從官方與市場網站抓取，將直接參與您的預算動態加權運算：</p>
-                
-                <ul style="list-style-type: none; padding: 0; margin-top: 15px;">
-                    {% if market_data %}
-                        {% for key, value in market_data.items() %}
-                            <li style="padding: 8px 0; border-bottom: 1px solid #e9ecef;">
-                                <strong>{{ key }}：</strong> 
-                                <span style="color: #007bff; font-weight: bold;">{{ value }}</span>
-                            </li>
-                        {% endfor %}
-                    {% else %}
-                        <li>目前尚無即時爬蟲數據，請確認排程是否已執行。</li>
-                    {% endif %}
-                </ul>
-            </div>
-
         </div>
     </div>
+
+    <!-- 刪除項目的 JavaScript 觸發函式 -->
+    <script>
+        function deleteItem(itemName) {
+            if (confirm('確定要永久刪除會計科目「' + itemName + '」嗎？')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/dept/{{ dept_id }}/delete_item/' + encodeURIComponent(itemName);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+    </script>
 </body>
 </html>

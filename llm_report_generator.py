@@ -1,12 +1,10 @@
-import os
 import openai
 
 def generate_executive_budget_report(department, user_inputs, market_data, calc_results):
     """
-    透過 LLM 結合內部輸入、外部市場指標與計算結果，生成符合主管要求的五大維度高階主管報告
+    透過本機 Ollama (OpenAI 相容介面) 結合內部輸入、外部市場指標與計算結果，生成高階主管報告
     """
     
-    # 嚴格規範 LLM 輸出的結構與五大核心項目
     prompt = f"""
     你是一位資深保險公司的財務長 (CFO) 與首席精算師。請根據以下數據，為高階主管撰寫一份結構清晰、專業的預算決策與執行報告。
     
@@ -25,10 +23,15 @@ def generate_executive_budget_report(department, user_inputs, market_data, calc_
     """
 
     try:
-        client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        # 將 base_url 指向本機 Ollama 服務 (預設連接埠為 11434)
+        # api_key 填入任意字串即可（Ollama 不需要驗證金鑰）
+        client = openai.OpenAI(
+            base_url="http://localhost:11434/v1",
+            api_key="ollama"
+        )
         
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="llama3",  # 這裡對應您在本地執行的模型名稱
             messages=[
                 {"role": "system", "content": "你是一個專業的企業財務與精算 AI 顧問，擅長結構化企業預算報告與風險控管。"},
                 {"role": "user", "content": prompt}
@@ -39,12 +42,12 @@ def generate_executive_budget_report(department, user_inputs, market_data, calc_
         return response.choices[0].message.content
         
     except Exception as e:
-        # 當未設定 API Key 時的結構化備用機制（Fall-back）
+        # 當本機 Ollama 未啟動或連線失敗時的備用機制（Fall-back）
         return f"""
         1. 【目前使用率】: 根據當前模型計算，整體預算使用率約在 82% 左右。
         2. 【警訊類別】: 🟡 黃色注意 (接近預算控管門檻)
         3. 【分析摘要】: 內部運營與外部市場指標（如利差與 CPI 通膨率）已完成交叉運算，整體成本呈現溫和上升趨勢。
         4. 【提醒可能超支或落後的項目】: 行銷競賽活動支出、外部顧問與系統升級分期費用需加強控管。
         5. 【後續預算建議】: 建議落實每月動態檢核，優先將資源傾斜至高轉換率專案，並預留準備金因應總經波動。
-        （系統提示：若要啟用完整的 LLM 即時 AI 深度分析，請於環境變數設定有效的 OPENAI_API_KEY。細節：{str(e)}）
+        （系統提示：已嘗試連線本機 Ollama，請確認 Ollama 是否已在背景啟動。細節：{str(e)}）
         """
