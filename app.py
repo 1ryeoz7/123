@@ -66,6 +66,49 @@ DEPT_CATEGORIES = {
     'underwriting_claims': ['理賠準備金', '公證外包', '核保醫療體檢費', '再保險支出', '防阻詐欺與調查']
 }
 
+# --- A. 各部門專屬的分數計算邏輯 ---
+def calculate_department_score(
+    dept_id, internal_data, base_budget, projected_budget
+):
+  """根據不同部門的會計科目與細項，計算專屬的風險/預算健康分數 (0-100分)"""
+  expansion_rate = (
+      (projected_budget - base_budget) / base_budget if base_budget > 0 else 0
+  )
+  base_score = 100 - (expansion_rate * 100)
+
+  if dept_id == 'sales':
+    # 業務部：特別關注行銷與業務相關費用
+    marketing_amount = sum(
+        data['amount']
+        for name, data in internal_data.items()
+        if '行銷' in name or '業務' in name or '推廣' in name
+    )
+    if base_budget > 0 and (marketing_amount / base_budget) > 0.3:
+      base_score -= 10
+
+  elif dept_id == 'risk':
+    # 風險精算部：對合規與負債變動更為敏感
+    if base_score < 70:
+      base_score -= 5
+
+  elif dept_id == 'it':
+    # 資訊科技部：科技預算彈性較低，依擴張率平滑計分
+    base_score = 100 - (expansion_rate * 80)
+
+  # 確保分數落在 0 到 100 之間
+  return max(0, min(100, round(base_score, 1)))
+
+
+# --- B. 全公司統一的燈號判定標準 ---
+def evaluate_warning_level(score):
+  """將任意部門算出的分數，對應到全公司統一的燈號標準"""
+  if score >= 85:
+    return '🟢 綠色安全'
+  elif score >= 70:
+    return '🟡 黃色注意'
+  else:
+    return '🔴 紅色警戒'
+
 
 # ==========================================
 # 🛡️ 統一所有部門的警示燈號級距邏輯 (0-100 分)
@@ -245,6 +288,53 @@ def department_input(dept_id):
     internal_data = {
         r.item_name: {'category': r.category, 'amount': r.amount}
         for r in records
+    }
+
+    # 模擬或呼叫您的市場爬蟲數據
+    market_data = (
+        fetch_market_data()
+        if 'fetch_market_data' in globals()and callable(fetch_market_data):
+            market_data = fetch_market_data()
+        else {
+            '利差 (Spread)': '1.45%',
+            'CPI 年增率': '2.10%',
+            'FYP 成長率': '5.80%',
+        }
+    )
+
+    total_current_amount = sum(d['amount'] for d in internal_data.values())
+    projected_budget = base_budget * (1 + growth_rate)
+
+    # 呼叫各部門獨立的評分邏輯與統一的燈號判定標準
+    score = calculate_department_score(
+        dept_id, internal_data, base_budget, projected_budget
+    )
+    level = evaluate_warning_level(score)
+
+    calc_results = {
+        'projected_budget': projected_budget,
+        'total_current_amount': total_current_amount,
+        'score': score,
+        'level': level,
+    }
+
+    # --- C. 呼叫本機 Ollama 生成 AI 決策報告 ---
+    ai_report = generate_executive_budget_report(
+        department=department_name,
+        user_inputs=internal_data,
+        market_data=market_data,
+        calc_results=calc_results,
+    )
+
+    # --- D. 封裝結果資料並導向 result.html 呈現 ---
+    result_data = {
+        'department': department_name,
+        'base_budget': base_budget,
+        'adjusted_growth_rate': growth_rate,
+        'projected_budget': projected_budget,
+        'warning_score': score,
+        'warning_level': level,
+        'market_snapshot': market_data,
     }
 
     return render_template(
