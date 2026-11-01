@@ -12,6 +12,8 @@ from calculator_underwriting_claims import UnderwritingClaimsCalculator
 
 # 全域市場與部門即時爬蟲數據變數
 DAILY_MARKET_DATA = {}
+_scheduler_thread = None
+_scheduler_lock = threading.Lock()
 
 
 def update_daily_all_departments_market_data_job():
@@ -56,22 +58,24 @@ def update_daily_all_departments_market_data_job():
 
 
 def run_scheduler_loop():
+  schedule.every().day.at('08:30').do(
+      update_daily_all_departments_market_data_job
+  )
+  update_daily_all_departments_market_data_job()
+
   while True:
     schedule.run_pending()
     time.sleep(1)
 
 
 def init_scheduler():
-  global DAILY_MARKET_DATA
-  # 程式啟動時先執行一次即時爬蟲初始化全域數據
-  update_daily_all_departments_market_data_job()
+  global _scheduler_thread
+  with _scheduler_lock:
+    if _scheduler_thread and _scheduler_thread.is_alive():
+      return
 
-  # 設定每天早上 08:30 定時執行即時爬蟲
-  schedule.every().day.at('08:30').do(
-      update_daily_all_departments_market_data_job
-  )
-
-  # 以背景執行緒運行排程，避免阻斷 Flask 主服務
-  t = threading.Thread(target=run_scheduler_loop, daemon=True)
-  t.start()
-  print('背景排程服務已成功初始化並啟動！')
+    _scheduler_thread = threading.Thread(
+        target=run_scheduler_loop, daemon=True
+    )
+    _scheduler_thread.start()
+    print('背景排程服務已成功初始化並啟動！')

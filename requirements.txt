@@ -9,3 +9,7 @@ prophet
 openai
 matplotlib
 gunicorn
+Flask-SQLAlchemy
+yfinance
+schedule
+openpyxl

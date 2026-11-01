@@ -39,6 +39,7 @@
     </div>
 
     <!-- 頁面 1 下方：Menu 選單 (頁面 2 的入口) -->
+    <p><a href="{{ url_for('import_batches') }}">📥 管理 Excel 預算資料匯入與版本</a></p>
     <h3>📂 部門導覽 Menu</h3>
     <ul class="menu-list">
         {% for dept_id, dept_name in depts.items() %}

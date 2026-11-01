@@ -1,8 +1,21 @@
 import io
-from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, send_file
+import math
+import zipfile
+from datetime import datetime, timezone
+from flask import (
+    Flask,
+    abort,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    send_file,
+)
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.utils import secure_filename
 import pandas as pd
+import scheduler
+from scheduler import init_scheduler
 
 # 1. 匯入五大部門的計算模組
 from calculator_investment import calculate_investment_department_budget
@@ -13,12 +26,12 @@ from calculator_underwriting_claims import calculate_underwriting_claims_budget
 
 # 2. 匯入 LLM 報告生成模組與背景排程器
 from llm_report_generator import generate_executive_budget_report
-from scheduler import DAILY_MARKET_DATA, init_scheduler
 
 # ==========================================
 # 應用程式配置 (App Configurations)
 # ==========================================
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 # 設定 SQLite 資料庫
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///budget_system.db'
@@ -36,6 +49,40 @@ class BudgetItemModel(db.Model):
     item_name = db.Column(db.String(100), nullable=False)  # 會計科目項目
     category = db.Column(db.String(50), nullable=False)   # 支出種類標籤
     amount = db.Column(db.Float, nullable=False)          # 金額
+
+
+class BudgetImportBatch(db.Model):
+    """保留每次匯入的 Excel 版本與預覽狀態"""
+    id = db.Column(db.Integer, primary_key=True)
+    original_filename = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='preview')
+    version = db.Column(db.Integer, nullable=True, unique=True)
+    row_count = db.Column(db.Integer, nullable=False, default=0)
+    error_count = db.Column(db.Integer, nullable=False, default=0)
+    validation_errors = db.Column(db.JSON, nullable=False, default=list)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class ImportedBudgetItem(db.Model):
+    """單一匯入版本中的預算科目快照"""
+    id = db.Column(db.Integer, primary_key=True)
+    batch_id = db.Column(
+        db.Integer, db.ForeignKey('budget_import_batch.id'), nullable=False
+    )
+    department = db.Column(db.String(50), nullable=False)
+    item_code = db.Column(db.String(50), nullable=False)
+    item_name = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    source_row = db.Column(db.Integer, nullable=False)
+    __table_args__ = (
+        db.UniqueConstraint(
+            'batch_id', 'department', 'item_code',
+            name='uq_import_batch_department_item_code',
+        ),
+    )
 
 
 # ==========================================
@@ -57,6 +104,22 @@ DEPT_CODES = {
     'underwriting_claims': 'Underwriting',
 }
 
+IMPORT_SHEETS = {
+    'Sales': 'Sales',
+    'Risk': 'Risk',
+    'Investment': 'Investment',
+    'Support': 'Support',
+    'Underwriting': 'Underwriting',
+}
+IMPORT_COLUMNS = ('ItemCode', 'Item', 'Category', 'Amount')
+MAX_IMPORT_ROWS = 50000
+
+RESERVED_ITEM_NAMES = frozenset({
+    'new_item_name',
+    'new_item_category',
+    'new_item_amount',
+})
+
 # 📌 各部門專屬的支出種類標籤下拉選單項目
 DEPT_CATEGORIES = {
     'sales': ['業務變動成本', '業務營運指標', '通路費率規範', '獎金與激勵', '營運與培訓', '行銷與推廣'],
@@ -66,68 +129,6 @@ DEPT_CATEGORIES = {
     'underwriting_claims': ['理賠準備金', '公證外包', '核保醫療體檢費', '再保險支出', '防阻詐欺與調查']
 }
 
-# --- A. 各部門專屬的分數計算邏輯 ---
-def calculate_department_score(
-    dept_id, internal_data, base_budget, projected_budget
-):
-  """根據不同部門的會計科目與細項，計算專屬的風險/預算健康分數 (0-100分)"""
-  expansion_rate = (
-      (projected_budget - base_budget) / base_budget if base_budget > 0 else 0
-  )
-  base_score = 100 - (expansion_rate * 100)
-
-  if dept_id == 'sales':
-    # 業務部：特別關注行銷與業務相關費用
-    marketing_amount = sum(
-        data['amount']
-        for name, data in internal_data.items()
-        if '行銷' in name or '業務' in name or '推廣' in name
-    )
-    if base_budget > 0 and (marketing_amount / base_budget) > 0.3:
-      base_score -= 10
-
-  elif dept_id == 'risk':
-    # 風險精算部：對合規與負債變動更為敏感
-    if base_score < 70:
-      base_score -= 5
-
-  elif dept_id == 'it':
-    # 資訊科技部：科技預算彈性較低，依擴張率平滑計分
-    base_score = 100 - (expansion_rate * 80)
-
-  # 確保分數落在 0 到 100 之間
-  return max(0, min(100, round(base_score, 1)))
-
-
-# --- B. 全公司統一的燈號判定標準 ---
-def evaluate_warning_level(score):
-  """將任意部門算出的分數，對應到全公司統一的燈號標準"""
-  if score >= 85:
-    return '🟢 綠色安全'
-  elif score >= 70:
-    return '🟡 黃色注意'
-  else:
-    return '🔴 紅色警戒'
-
-
-# ==========================================
-# 🛡️ 統一所有部門的警示燈號級距邏輯 (0-100 分)
-# ==========================================
-def get_warning_level(score):
-    """根據各部門算出之 Warning Score (0-100)，比對統一燈號區間"""
-    try:
-        score_val = float(score)
-    except (ValueError, TypeError):
-        score_val = 50.0
-
-    if score_val >= 75:
-        return '🔴 紅燈 (高風險警戒)'
-    elif score_val >= 60:
-        return '🟡 黃燈 (中度波動預警)'
-    else:
-        return '🟢 綠燈 (常態安全區間)'
-
-
 # ==========================================
 # 初始化資料庫預設資料與排程器
 # ==========================================
@@ -135,6 +136,12 @@ def init_db():
     """初始化資料庫表單，若無資料則匯入預設數據"""
     with app.app_context():
         db.create_all()
+        removed_reserved_items = BudgetItemModel.query.filter(
+            BudgetItemModel.item_name.in_(RESERVED_ITEM_NAMES)
+        ).delete(synchronize_session=False)
+        if removed_reserved_items:
+            db.session.commit()
+
         if BudgetItemModel.query.count() == 0:
             default_records = [
                 # 業務部門 (Sales)
@@ -174,7 +181,283 @@ init_scheduler()
 @app.route('/')
 def index():
     """首頁"""
-    return render_template('index.html', market_data=DAILY_MARKET_DATA, depts=DEPT_NAMES)
+    return render_template('index.html', market_data=scheduler.DAILY_MARKET_DATA, depts=DEPT_NAMES)
+
+
+@app.route('/imports')
+def import_batches():
+    batches = BudgetImportBatch.query.order_by(
+        BudgetImportBatch.id.desc()
+    ).limit(50).all()
+    return render_template('imports.html', batches=batches)
+
+
+@app.route('/imports/template')
+def download_import_template():
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        for sheet_name in IMPORT_SHEETS:
+            pd.DataFrame(columns=IMPORT_COLUMNS).to_excel(
+                writer, sheet_name=sheet_name, index=False
+            )
+    output.seek(0)
+    return send_file(
+        output,
+        download_name='budget_import_template.xlsx',
+        as_attachment=True,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
+def _import_error(sheet, row, column, message):
+    return {
+        'sheet': sheet,
+        'row': row,
+        'column': column,
+        'message': message,
+    }
+
+
+def _cell_text(value):
+    if pd.isna(value):
+        return ''
+    return str(value).strip()
+
+
+def _parse_import_amount(value):
+    if pd.isna(value) or isinstance(value, bool):
+        raise ValueError('金額不可空白，且必須是數字。')
+    if isinstance(value, str):
+        value = value.strip().replace(',', '')
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        raise ValueError('金額必須是有效數字。')
+    if not math.isfinite(amount) or amount < 0:
+        raise ValueError('金額必須是大於或等於 0 的有限數值。')
+    return amount
+
+
+@app.route('/imports/upload', methods=['POST'])
+def upload_budget_workbook():
+    uploaded_file = request.files.get('workbook')
+    if not uploaded_file or not uploaded_file.filename:
+        return render_template(
+            'imports.html',
+            batches=BudgetImportBatch.query.order_by(
+                BudgetImportBatch.id.desc()
+            ).limit(50).all(),
+            upload_error='請選擇 Excel 檔案。',
+        ), 400
+
+    original_filename = secure_filename(uploaded_file.filename) or 'budget.xlsx'
+    if not original_filename.lower().endswith('.xlsx'):
+        return render_template(
+            'imports.html',
+            batches=BudgetImportBatch.query.order_by(
+                BudgetImportBatch.id.desc()
+            ).limit(50).all(),
+            upload_error='目前只接受 .xlsx 格式。',
+        ), 400
+
+    workbook_bytes = uploaded_file.read()
+    if not workbook_bytes:
+        return render_template(
+            'imports.html',
+            batches=BudgetImportBatch.query.order_by(
+                BudgetImportBatch.id.desc()
+            ).limit(50).all(),
+            upload_error='上傳的檔案是空的。',
+        ), 400
+
+    errors = []
+    preview_rows = []
+    import_rows = []
+    try:
+        if not zipfile.is_zipfile(io.BytesIO(workbook_bytes)):
+            raise ValueError('檔案不是有效的 .xlsx 活頁簿。')
+        workbook = pd.ExcelFile(
+            io.BytesIO(workbook_bytes), engine='openpyxl'
+        )
+    except (ValueError, OSError, zipfile.BadZipFile) as error:
+        return render_template(
+            'imports.html',
+            batches=BudgetImportBatch.query.order_by(
+                BudgetImportBatch.id.desc()
+            ).limit(50).all(),
+            upload_error=f'無法讀取 Excel 檔案：{error}',
+        ), 400
+
+    expected_sheets = set(IMPORT_SHEETS)
+    actual_sheets = set(workbook.sheet_names)
+    for missing_sheet in sorted(expected_sheets - actual_sheets):
+        errors.append(_import_error(
+            missing_sheet, 1, '工作表',
+            '缺少必要的部門工作表。',
+        ))
+    for unexpected_sheet in sorted(actual_sheets - expected_sheets):
+        errors.append(_import_error(
+            unexpected_sheet, 1, '工作表',
+            '工作表名稱不在支援的部門清單中。',
+        ))
+
+    total_data_rows = 0
+    row_limit_reached = False
+    for sheet_name, department in IMPORT_SHEETS.items():
+        if sheet_name not in actual_sheets:
+            continue
+        frame = pd.read_excel(
+            workbook, sheet_name=sheet_name, dtype=object
+        )
+        frame.columns = [str(column).strip() for column in frame.columns]
+        if len(set(frame.columns)) != len(frame.columns):
+            errors.append(_import_error(
+                sheet_name, 1, '欄位',
+                '欄位名稱重複，請確認標題列。',
+            ))
+            continue
+
+        missing_columns = set(IMPORT_COLUMNS) - set(frame.columns)
+        for missing_column in sorted(missing_columns):
+            errors.append(_import_error(
+                sheet_name, 1, missing_column,
+                f'缺少必要欄位 {missing_column}。',
+            ))
+        if missing_columns:
+            continue
+
+        seen_item_codes = set()
+        for dataframe_row, values in frame.iterrows():
+            excel_row = int(dataframe_row) + 2
+            cells = {column: values[column] for column in IMPORT_COLUMNS}
+            if all(pd.isna(value) or _cell_text(value) == '' for value in cells.values()):
+                continue
+
+            if total_data_rows >= MAX_IMPORT_ROWS:
+                errors.append(_import_error(
+                    sheet_name, excel_row, '資料列',
+                    f'匯入資料不可超過 {MAX_IMPORT_ROWS} 列。',
+                ))
+                row_limit_reached = True
+                break
+
+            total_data_rows += 1
+            row_errors = []
+            item_code = _cell_text(cells['ItemCode'])
+            item_name = _cell_text(cells['Item'])
+            category = _cell_text(cells['Category'])
+            if not item_code:
+                row_errors.append(('ItemCode', '科目代碼不可空白。'))
+            elif len(item_code) > 50:
+                row_errors.append(('ItemCode', '科目代碼不可超過 50 個字元。'))
+            elif item_code in seen_item_codes:
+                row_errors.append(('ItemCode', '同一部門工作表中科目代碼重複。'))
+            else:
+                seen_item_codes.add(item_code)
+
+            if not item_name:
+                row_errors.append(('Item', '科目名稱不可空白。'))
+            elif len(item_name) > 100:
+                row_errors.append(('Item', '科目名稱不可超過 100 個字元。'))
+            if not category:
+                row_errors.append(('Category', '標籤不可空白。'))
+            elif len(category) > 50:
+                row_errors.append(('Category', '標籤不可超過 50 個字元。'))
+
+            try:
+                amount = _parse_import_amount(cells['Amount'])
+            except ValueError as error:
+                row_errors.append(('Amount', str(error)))
+
+            for column, message in row_errors:
+                errors.append(_import_error(
+                    sheet_name, excel_row, column, message
+                ))
+
+            if not row_errors:
+                item = {
+                    'department': department,
+                    'item_code': item_code,
+                    'item_name': item_name,
+                    'category': category,
+                    'amount': amount,
+                    'source_row': excel_row,
+                }
+                import_rows.append(item)
+                if len(preview_rows) < 100:
+                    preview_rows.append({
+                        **item,
+                        'department_name': next(
+                            name for key, name in DEPT_NAMES.items()
+                            if DEPT_CODES[key] == department
+                        ),
+                    })
+        if row_limit_reached:
+            break
+
+    batch = BudgetImportBatch(
+        original_filename=original_filename,
+        status='preview',
+        row_count=len(import_rows),
+        error_count=len(errors),
+        validation_errors=errors,
+    )
+    db.session.add(batch)
+    db.session.flush()
+    db.session.add_all(
+        ImportedBudgetItem(batch_id=batch.id, **row)
+        for row in import_rows
+    )
+    db.session.commit()
+
+    return render_template(
+        'imports.html',
+        batches=BudgetImportBatch.query.order_by(
+            BudgetImportBatch.id.desc()
+        ).limit(50).all(),
+        preview_batch=batch,
+        preview_rows=preview_rows,
+        preview_errors=errors[:100],
+        omitted_error_count=max(0, len(errors) - 100),
+    )
+
+
+@app.route('/imports/<int:batch_id>')
+def import_batch_detail(batch_id):
+    batch = db.get_or_404(BudgetImportBatch, batch_id)
+    preview_rows = ImportedBudgetItem.query.filter_by(
+        batch_id=batch.id
+    ).order_by(
+        ImportedBudgetItem.department,
+        ImportedBudgetItem.source_row,
+    ).limit(100).all()
+    return render_template(
+        'imports.html',
+        batches=BudgetImportBatch.query.order_by(
+            BudgetImportBatch.id.desc()
+        ).limit(50).all(),
+        preview_batch=batch,
+        preview_rows=preview_rows,
+        preview_errors=batch.validation_errors[:100],
+        omitted_error_count=max(0, batch.error_count - 100),
+    )
+
+
+@app.route('/imports/<int:batch_id>/confirm', methods=['POST'])
+def confirm_import_batch(batch_id):
+    batch = db.get_or_404(BudgetImportBatch, batch_id)
+    if batch.status != 'preview':
+        abort(409, '此匯入批次已確認或不可再變更。')
+    if batch.error_count or not batch.row_count:
+        abort(400, '匯入資料仍有錯誤，或沒有可匯入的資料列。')
+
+    latest_version = db.session.query(
+        db.func.max(BudgetImportBatch.version)
+    ).scalar() or 0
+    batch.version = latest_version + 1
+    batch.status = 'confirmed'
+    db.session.commit()
+    return redirect(url_for('import_batch_detail', batch_id=batch.id))
 
 
 @app.route('/dept/<dept_id>')
@@ -193,83 +476,154 @@ def department_input(dept_id):
     department_name = DEPT_NAMES[dept_id]
     db_code = DEPT_CODES[dept_id]
     available_categories = DEPT_CATEGORIES.get(dept_id, ['一般支出'])
+    market_data_keys = {
+        'sales': 'sales_data',
+        'risk_actuarial': 'risk_data',
+        'investment': 'investment_data',
+        'support': 'support_data',
+        'underwriting_claims': 'uw_data',
+    }
+    calculators = {
+        'sales': calculate_sales_department_budget,
+        'risk_actuarial': calculate_risk_actuarial_budget,
+        'investment': calculate_investment_department_budget,
+        'support': calculate_support_department_budget,
+        'underwriting_claims': calculate_underwriting_claims_budget,
+    }
+
+    def render_input_form(
+        base_budget=100000000.0, growth_rate=0.05, form_error=None
+    ):
+        records = BudgetItemModel.query.filter_by(department=db_code).all()
+        internal_data = {
+            record.item_name: {
+                'category': record.category,
+                'amount': record.amount,
+            }
+            for record in records
+        }
+        return render_template(
+            'input_form.html',
+            department_name=department_name,
+            dept_id=dept_id,
+            base_budget=base_budget,
+            growth_rate=growth_rate,
+            internal_data=internal_data,
+            available_categories=available_categories,
+            form_error=form_error,
+        )
+
+    def parse_non_negative_amount(value, label):
+        try:
+            amount = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(f'{label}必須是有效數字。')
+        if not math.isfinite(amount) or amount < 0:
+            raise ValueError(f'{label}必須是大於或等於 0 的有限數值。')
+        return amount
 
     if request.method == 'POST':
-        base_budget = float(request.form.get('base_budget', 0))
-        growth_rate = float(request.form.get('growth_rate', 0))
-
-        # 更新現有科目金額與種類
         records = BudgetItemModel.query.filter_by(department=db_code).all()
-        for record in records:
-            if record.item_name in request.form:
-                try:
-                    record.amount = float(request.form.get(record.item_name))
-                except ValueError:
-                    pass
-            cat_key = f'category_{record.item_name}'
-            if cat_key in request.form:
-                record.category = request.form.get(cat_key)
+        try:
+            base_budget = parse_non_negative_amount(
+                request.form.get('base_budget'), '基準預算'
+            )
+            growth_rate = float(request.form.get('growth_rate', ''))
+            if not math.isfinite(growth_rate) or growth_rate < -1:
+                raise ValueError('預期成長率必須是大於或等於 -1 的有限數值。')
 
-        # 處理新增的自訂科目
-        new_item_name = request.form.get('new_item_name', '').strip()
-        new_item_category = request.form.get('new_item_category', '').strip()
-        new_item_amount = request.form.get('new_item_amount', '').strip()
+            amount_updates = {}
+            category_updates = {}
+            allowed_categories = set(available_categories)
+            allowed_categories.add('一般支出')
+
+            for record in records:
+                if record.item_name in RESERVED_ITEM_NAMES:
+                    continue
+
+                if record.item_name in request.form:
+                    amount_updates[record.id] = parse_non_negative_amount(
+                        request.form.get(record.item_name),
+                        f'「{record.item_name}」金額',
+                    )
+
+                category_key = f'category_{record.item_name}'
+                if category_key in request.form:
+                    category = request.form.get(category_key, '').strip()
+                    if not category or (
+                        category not in allowed_categories
+                        and category != record.category
+                    ):
+                        raise ValueError(f'「{record.item_name}」的支出類別無效。')
+                    if len(category) > 50:
+                        raise ValueError(f'「{record.item_name}」的支出類別不可超過 50 個字元。')
+                    category_updates[record.id] = category
+
+            new_item_name = request.form.get('new_item_name', '').strip()
+            new_item_category = request.form.get('new_item_category', '').strip()
+            new_item_amount = request.form.get('new_item_amount', '').strip()
+            if new_item_name:
+                if len(new_item_name) > 100:
+                    raise ValueError('新科目名稱不可超過 100 個字元。')
+                if new_item_category and new_item_category not in allowed_categories:
+                    raise ValueError('新科目的支出類別無效。')
+                if len(new_item_category) > 50:
+                    raise ValueError('新科目的支出類別不可超過 50 個字元。')
+                new_item_amount_value = parse_non_negative_amount(
+                    new_item_amount or '0', '新科目金額'
+                )
+        except ValueError as error:
+            return render_input_form(
+                request.form.get('base_budget', 100000000.0),
+                request.form.get('growth_rate', 0.05),
+                str(error),
+            )
+
+        for record in records:
+            if record.id in amount_updates:
+                record.amount = amount_updates[record.id]
+            if record.id in category_updates:
+                record.category = category_updates[record.id]
 
         if new_item_name:
-            try:
-                amt = float(new_item_amount) if new_item_amount else 0.0
-                existing = BudgetItemModel.query.filter_by(department=db_code, item_name=new_item_name).first()
-                if existing:
-                    existing.amount = amt
-                    if new_item_category:
-                        existing.category = new_item_category
-                else:
-                    new_rec = BudgetItemModel(
+            existing = BudgetItemModel.query.filter_by(
+                department=db_code, item_name=new_item_name
+            ).first()
+            if existing:
+                existing.amount = new_item_amount_value
+                if new_item_category:
+                    existing.category = new_item_category
+            else:
+                db.session.add(
+                    BudgetItemModel(
                         department=db_code,
                         item_name=new_item_name,
                         category=new_item_category or available_categories[0],
-                        amount=amt,
+                        amount=new_item_amount_value,
                     )
-                    db.session.add(new_rec)
-            except ValueError:
-                pass
+                )
 
         db.session.commit()
 
-        # 載入最新內部數據
         updated_records = BudgetItemModel.query.filter_by(department=db_code).all()
         internal_data = {
             r.item_name: {'category': r.category, 'amount': r.amount}
             for r in updated_records
         }
-
         user_inputs = {
             'base_budget': base_budget,
             'growth_rate': growth_rate,
-            'update_data': internal_data
+            'update_data': internal_data,
         }
-
-        # 呼叫各部門專屬獨立計算器模組
-        result = {}
-        if dept_id == 'sales':
-            result = calculate_sales_department_budget(user_inputs, DAILY_MARKET_DATA)
-        elif dept_id == 'risk_actuarial':
-            result = calculate_risk_actuarial_budget(user_inputs, DAILY_MARKET_DATA)
-        elif dept_id == 'investment':
-            result = calculate_investment_department_budget(user_inputs, DAILY_MARKET_DATA)
-        elif dept_id == 'support':
-            result = calculate_support_department_budget(user_inputs, DAILY_MARKET_DATA)
-        elif dept_id == 'underwriting_claims':
-            result = calculate_underwriting_claims_budget(user_inputs, DAILY_MARKET_DATA)
-
-        # 統一燈號對照邏輯
-        warning_score = result.get('warning_score', 50.0)
-        result['warning_level'] = get_warning_level(warning_score)
+        market_data = scheduler.DAILY_MARKET_DATA.get(
+            market_data_keys[dept_id], {}
+        )
+        result = calculators[dept_id](user_inputs, market_data)
 
         ai_report = generate_executive_budget_report(
             department=department_name,
             user_inputs=user_inputs,
-            market_data=DAILY_MARKET_DATA,
+            market_data=result.get('market_snapshot', market_data),
             calc_results=result,
         )
 
@@ -278,74 +632,10 @@ def department_input(dept_id):
             dept_id=dept_id,
             dept_name=department_name,
             result=result,
-            result_data=result,
-            report=ai_report,
-            ai_report=ai_report
+            ai_report=ai_report,
         )
 
-    # GET 請求：帶入 available_categories 供前端下拉選單渲染
-    records = BudgetItemModel.query.filter_by(department=db_code).all()
-    internal_data = {
-        r.item_name: {'category': r.category, 'amount': r.amount}
-        for r in records
-    }
-
-    # 模擬或呼叫您的市場爬蟲數據
-    market_data = (
-        fetch_market_data()
-        if 'fetch_market_data' in globals()and callable(fetch_market_data):
-            market_data = fetch_market_data()
-        else {
-            '利差 (Spread)': '1.45%',
-            'CPI 年增率': '2.10%',
-            'FYP 成長率': '5.80%',
-        }
-    )
-
-    total_current_amount = sum(d['amount'] for d in internal_data.values())
-    projected_budget = base_budget * (1 + growth_rate)
-
-    # 呼叫各部門獨立的評分邏輯與統一的燈號判定標準
-    score = calculate_department_score(
-        dept_id, internal_data, base_budget, projected_budget
-    )
-    level = evaluate_warning_level(score)
-
-    calc_results = {
-        'projected_budget': projected_budget,
-        'total_current_amount': total_current_amount,
-        'score': score,
-        'level': level,
-    }
-
-    # --- C. 呼叫本機 Ollama 生成 AI 決策報告 ---
-    ai_report = generate_executive_budget_report(
-        department=department_name,
-        user_inputs=internal_data,
-        market_data=market_data,
-        calc_results=calc_results,
-    )
-
-    # --- D. 封裝結果資料並導向 result.html 呈現 ---
-    result_data = {
-        'department': department_name,
-        'base_budget': base_budget,
-        'adjusted_growth_rate': growth_rate,
-        'projected_budget': projected_budget,
-        'warning_score': score,
-        'warning_level': level,
-        'market_snapshot': market_data,
-    }
-
-    return render_template(
-        'input_form.html',
-        department_name=department_name,
-        dept_id=dept_id,
-        base_budget=100000000.0,
-        growth_rate=0.05,
-        internal_data=internal_data,
-        available_categories=available_categories
-    )
+    return render_input_form()
 
 
 @app.route('/dept/<dept_id>/export_excel')
@@ -374,13 +664,14 @@ def export_excel(dept_id):
     )
 
 
-@app.route('/dept/<dept_id>/delete_item/<item_name>', methods=['POST'])
-def delete_department_item(dept_id, item_name):
+@app.route('/dept/<dept_id>/delete_item', methods=['POST'])
+def delete_department_item(dept_id):
     """刪除指定部門預算科目"""
     if dept_id not in DEPT_CODES:
         return '找不到該部門', 404
 
     db_code = DEPT_CODES[dept_id]
+    item_name = request.form.get('item_name', '')
     record = BudgetItemModel.query.filter_by(department=db_code, item_name=item_name).first()
 
     if record:

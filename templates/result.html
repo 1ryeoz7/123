@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ result_data.department or result.department }} - 預算預測與 AI 決策報告</title>
+    <title>{{ result.department }} - 預算預測與 AI 決策報告</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light py-5">
     <div class="container">
         <!-- 頂部標題與返回按鈕 -->
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>📊 {{ result_data.department or result.department }} - 動態預警與預算報告</h2>
+            <h2>📊 {{ result.department }} - 動態預警與預算報告</h2>
             <div>
                 <a href="/dept/{{ dept_id }}/input" class="btn btn-outline-primary me-2">✏️ 修改預算與參數</a>
                 <a href="/" class="btn btn-secondary">🏠 返回首頁總覽</a>
@@ -23,9 +23,9 @@
             <div class="col-md-6">
                 <div class="card shadow-sm h-100 border-left-primary">
                     <div class="card-body">
-                        <h5 class="text-muted">🛡️ {{ result_data.department or result.department }}專屬：動態預警分數 (Warning Score)</h5>
-                        <h1 class="display-4 fw-bold text-primary">{{ result_data.warning_score or result.warning_score }} <span class="fs-4">/ 100 分</span></h1>
-                        <p class="mb-0 mt-2"><strong>當前燈號狀態：</strong> <span class="badge bg-dark fs-6">{{ result_data.warning_level or result.warning_level }}</span></p>
+                        <h5 class="text-muted">🛡️ {{ result.department }}專屬：動態預警分數 (Warning Score)</h5>
+                        <h1 class="display-4 fw-bold text-primary">{{ result.warning_score }} <span class="fs-4">/ 100 分</span></h1>
+                        <p class="mb-0 mt-2"><strong>當前燈號狀態：</strong> <span class="badge bg-dark fs-6">{{ result.warning_level }}</span></p>
                     </div>
                 </div>
             </div>
@@ -35,9 +35,9 @@
                 <div class="card shadow-sm h-100">
                     <div class="card-body">
                         <h5 class="text-muted">預算預測摘要</h5>
-                        <p class="mb-1"><strong>基準預算總額：</strong> NT$ {{ "{:,.2f}".format(result_data.base_budget or result.base_budget) }}</p>
-                        <p class="mb-1"><strong>調整後成長率：</strong> {{ "{:.2%}".format(result_data.adjusted_growth_rate or result.adjusted_growth_rate) }}</p>
-                        <p class="mb-0"><strong>預測期末預算：</strong> <span class="text-success fw-bold fs-5">NT$ {{ "{:,.2f}".format(result_data.projected_budget or result.projected_budget) }}</span></p>
+                        <p class="mb-1"><strong>基準預算總額：</strong> NT$ {{ "{:,.2f}".format(result.base_budget) }}</p>
+                        <p class="mb-1"><strong>調整後成長率：</strong> {{ "{:.2%}".format(result.adjusted_growth_rate) }}</p>
+                        <p class="mb-0"><strong>預測期末預算：</strong> <span class="text-success fw-bold fs-5">NT$ {{ "{:,.2f}".format(result.projected_budget) }}</span></p>
                     </div>
                 </div>
             </div>
@@ -50,7 +50,7 @@
             </div>
             <div class="card-body">
                 <div class="row g-3">
-                    {% set snapshot = result_data.market_snapshot or result.market_snapshot %}
+                    {% set snapshot = result.market_snapshot %}
                     {% if snapshot %}
                         {% for key, val in snapshot.items() %}
                         <div class="col-md-4">
@@ -75,7 +75,7 @@
             </div>
             <div class="card-body bg-white">
                 <div class="p-3 rounded bg-light" style="white-space: pre-line; font-size: 1.05rem; line-height: 1.8;">
-{{ ai_report or report }}
+{{ ai_report }}
                 </div>
             </div>
         </div>
