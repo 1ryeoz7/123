@@ -1,150 +1,35 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ department_name }} - 預算編列與動態預警系統</title>
-    <!-- 引入 Bootstrap 5 樣式 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .border-dashed {
-            border: 2px dashed #6c757d !important;
-        }
-    </style>
-</head>
-<body class="bg-light py-5">
-    <div class="container">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-primary text-white">
-                <h3 class="mb-0">📊 {{ department_name }} - 預算編列與動態參數設定</h3>
-            </div>
-            <div class="card-body">
-                {% if form_error %}
-                <div class="alert alert-danger" role="alert">{{ form_error }}</div>
-                {% endif %}
-                <!-- 主表單：處理金額修改、新增與送出計算 -->
-                <form id="budgetForm" method="POST" action="">
-                    <!-- 基礎預算與成長率設定 -->
-                    <div class="row g-3 mb-4 p-3 bg-white rounded border">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">基準預算總額 (元)</label>
-                            <input type="number" min="0" step="any" class="form-control" name="base_budget" value="{{ base_budget }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">預期成長率 (小數形式，例如 0.05 代表 5%)</label>
-                            <input type="number" min="-1" step="0.001" class="form-control" name="growth_rate" value="{{ growth_rate }}" required>
-                        </div>
-                    </div>
+<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ dept_name }}預算輸入</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"></head>
+<body class="bg-light"><main class="container-fluid px-3 py-4">
+  <header class="d-flex justify-content-between align-items-center mb-3"><h1 class="h3">{{ dept_name }}｜預算輸入</h1><a href="{{ url_for('index') }}" class="btn btn-outline-secondary">返回首頁</a></header>
+  {% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <div class="alert alert-info"><strong>幣別與管理會計口徑：</strong>輸入金額為該列選定幣別的原幣金額，輸出以 TWD 報表幣顯示。USD 一般金額以即期匯率折算；市場預測 Fx 的鎖定部位以基準匯率 {{ FX_BUDGET_BASE|default('31.0') }}、未鎖定部位以即期匯率折算。上線前請依公司財務政策確認預算及實際金額的換算基準。</div>
+  <form method="post" action=""><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="table-responsive"><table class="table table-bordered table-sm align-middle bg-white text-center"><thead class="table-dark"><tr>
+      <th>科目</th><th>類別</th><th>年度預算 (原幣)</th><th>同期預算 (原幣)</th><th>實際 A (原幣)</th><th>基準預測 F0 (原幣)</th><th>幣別</th><th>避險鎖定比例</th><th>傳導係數</th><th>新增需求 D (原幣)</th><th>歷史 H (原幣)</th><th>排程項目</th><th>超支說明</th>
+    </tr></thead><tbody>
+    {% for r in records %}{% set prefix=r.id|string %}<tr>
+      <td class="text-start"><small class="text-muted d-block">{{ r.item_code }}</small>{{ r.item_name }}</td>
+      <td><select class="form-select form-select-sm" name="category_{{ r.id }}">{% for cat in available_categories %}<option value="{{ cat }}" {% if form_data.get('category_' ~ prefix, r.category)==cat %}selected{% endif %}>{{ cat }}</option>{% endfor %}</select></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" step="any" name="b_{{ r.id }}" value="{{ form_data.get('b_' ~ prefix, r.b_annual_budget) }}" required></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" step="any" name="b_per_{{ r.id }}" value="{{ form_data.get('b_per_' ~ prefix, r.b_period_budget) }}" required></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" step="any" name="a_{{ r.id }}" value="{{ form_data.get('a_' ~ prefix, r.a_actual) }}" required></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" step="any" name="f0_{{ r.id }}" value="{{ form_data.get('f0_' ~ prefix, r.f_0_forecast) }}" required></td>
+      <td><select class="form-select form-select-sm" name="currency_{{ r.id }}"><option value="TWD" {% if form_data.get('currency_' ~ prefix, r.currency)=='TWD' %}selected{% endif %}>TWD</option><option value="USD" {% if form_data.get('currency_' ~ prefix, r.currency)=='USD' %}selected{% endif %}>USD</option></select></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" max="1" step="0.01" name="locked_{{ r.id }}" value="{{ form_data.get('locked_' ~ prefix, r.locked_ratio) }}" required></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" max="1" step="0.01" name="a_trans_{{ r.id }}" value="{{ form_data.get('a_trans_' ~ prefix, r.a_transmission) }}" required></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" step="any" name="d_{{ r.id }}" value="{{ form_data.get('d_' ~ prefix, r.d_new_demand) }}" required></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" step="any" name="h_{{ r.id }}" value="{{ form_data.get('h_' ~ prefix, r.h_historical if r.h_historical is not none else '') }}"></td>
+      <td><select class="form-select form-select-sm" name="is_schedule_{{ r.id }}"><option value="FALSE" {% if form_data.get('is_schedule_' ~ prefix, 'TRUE' if r.is_schedule else 'FALSE')=='FALSE' %}selected{% endif %}>否</option><option value="TRUE" {% if form_data.get('is_schedule_' ~ prefix, 'TRUE' if r.is_schedule else 'FALSE')=='TRUE' %}selected{% endif %}>是</option></select></td>
+      <td><input class="form-control form-control-sm" name="reason_{{ r.id }}" value="{{ form_data.get('reason_' ~ prefix, r.overrun_reason or '') }}" maxlength="255"></td>
+    </tr>{% endfor %}</tbody></table></div>
 
-
-                    <hr>
-
-
-                    <!-- 現行會計科目與標籤表格 -->
-                    <h5 class="mb-3 text-secondary">現行會計科目與支出種類標籤</h5>
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-hover align-middle bg-white">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th style="width: 42%;">會計科目項目</th>
-                                    <th style="width: 25%;">支出種類標籤</th>
-                                    <th style="width: 23%;">現行金額 / 預算上限 (元)</th>
-                                    <th style="width: 10%; text-align: center;">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item_name, data in internal_data.items() %}
-                                {% if not item_name.startswith('new_item') %}
-                                <tr>
-                                    <td class="fw-semibold">{{ item_name }}</td>
-                                    <td>
-                                        <span class="badge bg-secondary">{{ data.category }}</span>
-                                        <select class="form-select" name="category_{{ item_name }}">
-                                            {% for category in available_categories %}
-                                            <option value="{{ category }}" {% if data.category == category %}selected{% endif %}>{{ category }}</option>
-                                            {% endfor %}
-                                            {% if data.category not in available_categories %}
-                                            <option value="{{ data.category }}" selected>{{ data.category }}</option>
-                                            {% endif %}
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <input type="number" min="0" step="any" class="form-control" name="{{ item_name }}" value="{{ data.amount }}" required>
-                                    </td>
-                                    <td class="text-center">
-                                        <!-- 單獨項目的刪除按鈕 -->
-                                        <button type="button" class="btn btn-outline-danger btn-sm" data-item-name="{{ item_name }}" onclick="deleteItem(this)">
-                                            🗑️ 刪除
-                                        </button>
-                                    </td>
-                                </tr>
-                                {% endif %}
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-
-                    <!-- ➕ 新增自訂預算科目與種類標籤區塊 -->
-                    <div class="card border-dashed bg-white mt-4 mb-4 shadow-sm">
-                        <div class="card-header bg-secondary text-white">
-                            <h5 class="mb-0">➕ 新增自訂預算科目與種類標籤</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-md-5">
-                                    <label class="form-label">新科目名稱（選填）</label>
-                                    <input type="text" maxlength="100" class="form-control" name="new_item_name" placeholder="例如：專案外包顧問費">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">指定支出種類標籤（選填）</label>
-                                    <select class="form-select" name="new_item_category">
-                                        <option value="" selected>使用部門預設類別</option>
-                                        {% for category in available_categories %}
-                                        <option value="{{ category }}">{{ category }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">預算金額 (元，選填)</label>
-                                    <input type="number" min="0" step="any" class="form-control" name="new_item_amount" placeholder="0">
-                                </div>
-                            </div>
-                            <small class="text-muted mt-2 d-block">此區為選填；只有填寫新科目名稱時才會新增項目。未填名稱時，類別與金額會一併忽略；名稱已填但金額留白時，金額以 0 計。</small>
-                        </div>
-                    </div>
-
-
-                    <!-- 🚀 確認送出與生成報告按鈕區塊 -->
-                    <div class="d-grid gap-2 mb-3">
-                        <button type="submit" class="btn btn-primary btn-lg py-3 fw-bold fs-5">
-                            🚀 確認送出並生成動態預警與 AI 決策報告
-                        </button>
-                        <a href="/" class="btn btn-outline-secondary">返回首頁總覽</a>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-
-    <!-- 刪除項目的 JavaScript 觸發函式 -->
-    <script>
-        function deleteItem(button) {
-            const itemName = button.dataset.itemName;
-            if (confirm('確定要永久刪除會計科目「' + itemName + '」嗎？')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/dept/{{ dept_id }}/delete_item';
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'item_name';
-                input.value = itemName;
-                form.appendChild(input);
-                document.body.appendChild(form);
-                form.submit();
-            }
-        }
-    </script>
-</body>
-</html>
+    <section class="card my-4"><div class="card-header d-flex justify-content-between"><strong>新增自訂科目</strong><button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">新增一列</button></div><div class="card-body table-responsive"><table class="table table-sm" id="newRows"><thead><tr><th>科目代碼</th><th>科目名稱</th><th>類別</th><th>年度預算</th><th>同期預算</th><th>實際</th><th>F0</th><th>幣別</th><th>鎖定比例</th><th>傳導係數</th><th>新增需求</th><th>歷史 H</th><th>排程</th><th>超支說明</th></tr></thead><tbody>
+    <tr><td><input class="form-control form-control-sm" name="new_item_code[]"></td><td><input class="form-control form-control-sm" name="new_item_name[]"></td><td><select class="form-select form-select-sm" name="new_item_category[]">{% for cat in available_categories %}<option>{{ cat }}</option>{% endfor %}</select></td>
+      <td><input class="form-control form-control-sm" type="number" min="0" step="any" name="new_b[]"></td><td><input class="form-control form-control-sm" type="number" min="0" step="any" name="new_b_per[]"></td><td><input class="form-control form-control-sm" type="number" min="0" step="any" name="new_a[]"></td><td><input class="form-control form-control-sm" type="number" min="0" step="any" name="new_f0[]"></td>
+      <td><select class="form-select form-select-sm" name="new_currency[]"><option>TWD</option><option>USD</option></select></td><td><input class="form-control form-control-sm" type="number" min="0" max="1" step="0.01" name="new_locked[]" value="0"></td><td><input class="form-control form-control-sm" type="number" min="0" max="1" step="0.01" name="new_a_trans[]" value="1"></td><td><input class="form-control form-control-sm" type="number" min="0" step="any" name="new_d[]"></td><td><input class="form-control form-control-sm" type="number" min="0" step="any" name="new_h[]"></td><td><select class="form-select form-select-sm" name="new_is_schedule[]"><option value="FALSE">否</option><option value="TRUE">是</option></select></td><td><input class="form-control form-control-sm" name="new_reason[]"></td></tr>
+    </tbody></table></div></section>
+    <button class="btn btn-primary btn-lg" type="submit">驗證、儲存並產生預測報告</button>
+  </form>
+</main><script>
+function addRow(){const body=document.querySelector('#newRows tbody');const row=body.rows[0].cloneNode(true);row.querySelectorAll('input').forEach(x=>{if(x.name==='new_locked[]')x.value='0';else if(x.name==='new_a_trans[]')x.value='1';else x.value='';});row.querySelectorAll('select').forEach(x=>x.selectedIndex=0);body.appendChild(row);}
+</script></body></html>

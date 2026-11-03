@@ -1,51 +1,19 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <title>保險公司預算分析與決策系統 - 首頁</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
-        h2 { color: #003366; }
-        .market-card { background: #eef9ff; padding: 20px; border-radius: 6px; margin-bottom: 25px; border-left: 5px solid #007bff; }
-        .market-card ul { padding-left: 20px; margin: 10px 0 0 0; }
-        .market-card li { margin: 8px 0; color: #333; }
-        .menu-list { list-style: none; padding: 0; }
-        .menu-list li { margin: 12px 0; }
-        .menu-list a { display: block; padding: 14px 20px; background: #003366; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; transition: background 0.2s; }
-        .menu-list a:hover { background: #002244; }
-        .timestamp { font-size: 0.85em; color: #666; margin-top: 10px; font-style: italic; }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h2>🏢 壽險公司預算分析與 AI 決策中樞 (首頁)</h2>
-    
-    <!-- 頁面 1 上方：目前外部重要資訊 (爬蟲即時抓取) -->
-    <div class="market-card">
-        <h3>📊 即時外部總經與市場指標 (每日自動更新)</h3>
-        <p style="font-size: 0.9em; color: #555; margin-bottom: 10px;">以下數據由背景排程每天自動從官方與市場即時爬蟲抓取，供各部門預算模型動態加權運算：</p>
-        
-        <ul>
-            {% if market_data and market_data.overview %}
-                {% for key, value in market_data.overview.items() %}
-                    <li>{{ key }}：<strong>{{ value }}</strong></li>
-                {% endfor %}
-            {% else %}
-                <li>目前正在背景初始化或同步即時市場爬蟲數據，請稍候重新整理...</li>
-            {% endif %}
-        </ul>
-        <div class="timestamp">系統狀態：背景排程連線正常，支援自動快取與防呆備援。</div>
-    </div>
-
-    <!-- 頁面 1 下方：Menu 選單 (頁面 2 的入口) -->
-    <p><a href="{{ url_for('import_batches') }}">📥 管理 Excel 預算資料匯入與版本</a></p>
-    <h3>📂 部門導覽 Menu</h3>
-    <ul class="menu-list">
-        {% for dept_id, dept_name in depts.items() %}
-            <li><a href="/dept/{{ dept_id }}">👉 進入 {{ dept_name }} 預算控制台</a></li>
-        {% endfor %}
-    </ul>
-</div>
-</body>
-</html>
+<!doctype html>
+<html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>智衡預算雷達</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"></head>
+<body class="bg-light"><main class="container py-4">
+  <header class="d-flex justify-content-between align-items-center mb-4"><div><h1 class="h3 mb-1">壽險公司預算分析與風險管理</h1><div class="text-muted">登入：{{ logged_user.username }}（{{ '管理者' if logged_user.role == 'admin' else '部門使用者' }}）</div></div>
+    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-outline-secondary">登出</button></form></header>
+  {% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <section class="card mb-4"><div class="card-body"><form method="post" action="{{ url_for('set_period') }}" class="row g-3 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="col-auto"><label class="form-label">年度</label><input class="form-control" type="number" name="year" min="2000" max="2100" value="{{ curr_year }}" required></div>
+    <div class="col-auto"><label class="form-label">期間</label><select class="form-select" name="period">{% for p in ['Q1','Q2','Q3','Q4','YTD'] %}<option value="{{ p }}" {% if p==curr_period %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></div>
+    <div class="col-auto"><button class="btn btn-primary">切換分析期間</button></div><div class="col-auto text-muted">目前：{{ curr_year }} {{ curr_period }}</div>
+  </form></div></section>
+  <div class="alert alert-info"><strong>管理會計口徑：</strong>預算金額以各科目選定幣別輸入，報表統一以 TWD 顯示。USD 一般金額按即期匯率換算；Fx 預測按避險比例及基準匯率拆分。請先確認企業匯率政策設定。</div>
+  <section class="card mb-4"><div class="card-header fw-bold">市場與風險資料狀態</div><div class="list-group list-group-flush">
+    {% for key,data in market_data.items() %}<div class="list-group-item d-flex flex-wrap justify-content-between gap-2"><div><strong>{{ key }}</strong>：{{ data.value }} <span class="badge {% if data.data_type=='realtime_api' %}text-bg-success{% elif data.data_type=='derived_model' %}text-bg-primary{% elif data.data_type=='static_simulation' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">{{ {'realtime_api':'外部來源','derived_model':'模型推算','static_simulation':'示範值','unavailable_fallback':'備援／無有效來源'}.get(data.data_type,'未知') }}</span>{% if data.is_cached %}<span class="badge text-bg-warning">快取／備援</span>{% endif %}<div class="small text-muted">{{ data.note }}</div></div><div class="small text-muted text-end">{{ data.source }}<br>{{ data.fetch_time }}</div></div>{% endfor %}
+  </div></section>
+  <div class="d-flex flex-wrap gap-2 mb-3">{% if logged_user.role=='admin' %}<a class="btn btn-danger" href="{{ url_for('company_summary') }}">全公司摘要</a><a class="btn btn-outline-primary" href="{{ url_for('import_batches') }}">Excel 匯入管理</a><a class="btn btn-outline-secondary" href="{{ url_for('notification_status') }}">提醒送達紀錄</a>{% endif %}</div>
+  <h2 class="h5">部門預算控制台</h2><div class="row g-3">{% for dept_id,dept_name in depts.items() %}<div class="col-md-6 col-lg-4"><a class="card card-body text-decoration-none h-100" href="{{ url_for('department_input',dept_id=dept_id) }}"><strong>{{ dept_name }}</strong><span class="text-muted small">輸入資料並產生預測分析</span></a></div>{% endfor %}</div>
+</main></body></html>

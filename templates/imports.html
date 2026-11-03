@@ -1,142 +1,15 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel 預算資料匯入</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light py-5">
-<main class="container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3">Excel 預算資料匯入與版本管理</h1>
-        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">返回首頁</a>
-    </div>
-
-    <section class="card shadow-sm mb-4">
-        <div class="card-header">上傳工作簿並預覽</div>
-        <div class="card-body">
-            <p>只接受不超過 10 MB 的 .xlsx，並需要包含 Sales、Risk、Investment、Support、Underwriting 五個工作表。</p>
-            <p>每張工作表必須有 <code>ItemCode</code>、<code>Item</code>、<code>Category</code>、<code>Amount</code> 欄位。每個部門的科目代碼須唯一；金額需為非負數。</p>
-            <p>Excel 匯入會先建立預覽；確認後才會建立新版本資料快照。此初版匯入不會取代部門表單使用的 SQLite 資料，也不會改變公式計算。</p>
-            {% if upload_error %}
-            <div class="alert alert-danger" role="alert">{{ upload_error }}</div>
-            {% endif %}
-            <p><a class="btn btn-outline-primary mb-3" href="{{ url_for('download_import_template') }}">下載匯入範本</a></p>
-            <form method="post" action="{{ url_for('upload_budget_workbook') }}" enctype="multipart/form-data">
-                <div class="input-group">
-                    <input type="file" class="form-control" name="workbook" accept=".xlsx" required>
-                    <button class="btn btn-primary" type="submit">上傳並驗證</button>
-                </div>
-            </form>
-        </div>
-    </section>
-
-    {% if preview_batch %}
-    <section class="card shadow-sm mb-4">
-        <div class="card-header">
-            匯入預覽：{{ preview_batch.original_filename }}
-            {% if preview_batch.version %}
-            （版本 {{ preview_batch.version }}）
-            {% else %}
-            （尚未確認）
-            {% endif %}
-        </div>
-        <div class="card-body">
-            <p>
-                狀態：{{ preview_batch.status }}；
-                可匯入資料列：{{ preview_batch.row_count }}；
-                錯誤：{{ preview_batch.error_count }}
-            </p>
-            {% if preview_batch.version %}
-            <p>此版本已保存為匯入快照，不會自動套用到目前的計算資料。</p>
-            {% endif %}
-
-            {% if preview_errors %}
-            <div class="alert alert-danger">
-                <h2 class="h6">需修正的資料</h2>
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0">
-                        <thead><tr><th>工作表</th><th>列</th><th>欄位</th><th>原因</th></tr></thead>
-                        <tbody>
-                        {% for error in preview_errors %}
-                            <tr>
-                                <td>{{ error.sheet }}</td>
-                                <td>{{ error.row }}</td>
-                                <td>{{ error.column }}</td>
-                                <td>{{ error.message }}</td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% if omitted_error_count %}
-                <p class="mt-2 mb-0">另有 {{ omitted_error_count }} 筆錯誤未顯示。</p>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            {% if preview_rows %}
-            <h2 class="h6">資料預覽（最多顯示 100 列）</h2>
-            <div class="table-responsive">
-                <table class="table table-striped table-sm">
-                    <thead>
-                        <tr><th>部門</th><th>ItemCode</th><th>Item</th><th>Category</th><th class="text-end">Amount</th><th>Excel 列</th></tr>
-                    </thead>
-                    <tbody>
-                    {% for item in preview_rows %}
-                        <tr>
-                            <td>{{ item.department_name or item.department }}</td>
-                            <td>{{ item.item_code }}</td>
-                            <td>{{ item.item_name }}</td>
-                            <td>{{ item.category }}</td>
-                            <td class="text-end">{{ "{:,.2f}".format(item.amount) }}</td>
-                            <td>{{ item.source_row }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% endif %}
-
-            {% if preview_batch.status == 'preview' and preview_batch.error_count == 0 and preview_batch.row_count > 0 %}
-            <form method="post" action="{{ url_for('confirm_import_batch', batch_id=preview_batch.id) }}">
-                <button class="btn btn-success" type="submit">確認並建立新版本</button>
-            </form>
-            {% elif preview_batch.status == 'preview' and preview_batch.error_count %}
-            <p class="text-danger mb-0">請修正 Excel 後重新上傳；有錯誤時不能確認匯入。</p>
-            {% endif %}
-        </div>
-    </section>
-    {% endif %}
-
-    <section class="card shadow-sm">
-        <div class="card-header">最近匯入批次</div>
-        <div class="card-body">
-            {% if batches %}
-            <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead><tr><th>建立時間</th><th>檔案</th><th>狀態</th><th>版本</th><th>資料列</th><th>錯誤</th><th></th></tr></thead>
-                    <tbody>
-                    {% for batch in batches %}
-                        <tr>
-                            <td>{{ batch.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                            <td>{{ batch.original_filename }}</td>
-                            <td>{{ batch.status }}</td>
-                            <td>{{ batch.version or '—' }}</td>
-                            <td>{{ batch.row_count }}</td>
-                            <td>{{ batch.error_count }}</td>
-                            <td><a href="{{ url_for('import_batch_detail', batch_id=batch.id) }}">查看</a></td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="mb-0">尚無匯入批次。</p>
-            {% endif %}
-        </div>
-    </section>
-</main>
-</body>
-</html>
+<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>預算資料匯入</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"></head>
+<body class="bg-light"><main class="container-fluid py-4"><header class="d-flex justify-content-between align-items-center mb-4"><h1 class="h3">Excel 預算匯入與版本管理</h1><a class="btn btn-outline-secondary" href="{{ url_for('index') }}">返回首頁</a></header>
+  {% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <section class="card mb-4"><div class="card-header">上傳並預覽 V18 工作簿</div><div class="card-body"><p>每張工作表須使用原幣填寫；USD 轉換與避險規則請先核對首頁／表單政策說明。年份為 2000–2100，IsSchedule 僅接受 TRUE 或 FALSE。</p>
+    <p><code>{{ '、'.join(['Year','Period','ItemCode','Item','Category','B_Annual','B_Period','A_Actual','F0_Forecast','Currency','Locked_Ratio','A_Trans','D_NewDemand','H_Hist','IsSchedule','Reason']) }}</code></p>
+    <p><a class="btn btn-outline-primary" href="{{ url_for('download_import_template') }}">下載 V18 Excel 範本</a></p>
+    <form method="post" action="{{ url_for('upload_budget_workbook') }}" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="input-group"><input type="file" class="form-control" name="workbook" accept=".xlsx" required><button class="btn btn-primary">上傳並驗證</button></div></form>
+  </div></section>
+  {% if preview_batch %}<section class="card mb-4"><div class="card-header bg-warning">預覽：{{ preview_batch.original_filename }}｜有效列 {{ preview_batch.row_count }}｜錯誤 {{ preview_batch.error_count }}</div><div class="card-body">
+    {% if preview_errors %}<div class="alert alert-danger"><strong>整批阻擋，修正後請重新上傳：</strong><ul>{% for e in preview_errors %}<li>{{ e.sheet }} 第 {{ e.row }} 列：{{ e.message }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if preview_rows %}<div class="table-responsive"><table class="table table-sm table-striped"><thead><tr><th>部門</th><th>年期</th><th>代碼</th><th>科目</th><th>預算 B</th><th>實際 A</th><th>F0</th><th>幣別</th><th>避險比</th><th>新增 D</th><th>說明</th></tr></thead><tbody>{% for r in preview_rows %}<tr><td>{{ r.department }}</td><td>{{ r.year }} {{ r.period }}</td><td>{{ r.item_code }}</td><td>{{ r.item_name }}</td><td>{{ '{:,.2f}'.format(r.b_annual_budget) }}</td><td>{{ '{:,.2f}'.format(r.a_actual) }}</td><td>{{ '{:,.2f}'.format(r.f_0_forecast) }}</td><td>{{ r.currency }}</td><td>{{ '{:.0%}'.format(r.locked_ratio) }}</td><td>{{ '{:,.2f}'.format(r.d_new_demand) }}</td><td>{{ r.overrun_reason or '' }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+    {% if preview_batch.status=='preview' and preview_batch.error_count==0 and preview_batch.row_count>0 %}<form method="post" action="{{ url_for('confirm_import_batch',batch_id=preview_batch.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-success">確認匯入並寫入正式資料</button></form>{% endif %}
+  </div></section>{% endif %}
+  <section class="card"><div class="card-header">最近匯入批次</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>批次</th><th>檔案</th><th>列數</th><th>錯誤</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>{% for b in batches %}<tr><td>{{ b.id }}</td><td>{{ b.original_filename }}</td><td>{{ b.row_count }}</td><td>{{ b.error_count }}</td><td>{{ b.status }}</td><td>{{ b.created_at }}</td></tr>{% else %}<tr><td colspan="6">尚無匯入批次。</td></tr>{% endfor %}</tbody></table></div></section>
+</main></body></html>
