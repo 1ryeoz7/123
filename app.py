@@ -679,7 +679,8 @@ def upload_budget_workbook():
     errors, valid_rows, preview_rows, seen = [], [], [], set()
     for sheet in IMPORT_SHEETS:
         dept, (dept_id, categories) = sheet, allowed[sheet]
-        frame = pd.read_excel(workbook, sheet_name=sheet, dtype=object)
+        # Keep blank cells distinct from Excel errors and literal text such as "NA".
+        frame = pd.read_excel(workbook, sheet_name=sheet, dtype=object, keep_default_na=False)
         frame.columns = [str(col).strip() for col in frame.columns]
         missing_cols = [col for col in IMPORT_COLUMNS if col not in frame.columns]
         if missing_cols:
@@ -702,7 +703,7 @@ def upload_budget_workbook():
                     raise ValueError("Period 格式無效")
                 code = str(cells["ItemCode"]).strip()
                 name = str(cells["Item"]).strip()
-                if not code or not name:
+                if not code or not name or pd.isna(cells["ItemCode"]) or pd.isna(cells["Item"]):
                     raise ValueError("科目代碼與科目名稱必填")
                 if len(name) > 100 or len(code) > 50:
                     raise ValueError("科目代碼或名稱超過欄位長度")
@@ -727,7 +728,8 @@ def upload_budget_workbook():
                 index_ratio = cpi if dept_id == "support" else medical
                 fx = apply_market_context(dept_id, category, f0, index_ratio, trans, currency, locked, spot, FX_BUDGET_BASE)
                 light = evaluate_traffic_light(convert_to_reporting_currency(b, currency, spot), convert_to_reporting_currency(bp, currency, spot), convert_to_reporting_currency(actual, currency, spot), fx, convert_to_reporting_currency(demand, currency, spot), sched_raw == "TRUE")[0]
-                reason = str(cells.get("Reason", "") or "").strip()
+                raw_reason = cells["Reason"]
+                reason = "" if pd.isna(raw_reason) else str(raw_reason or "").strip()
                 if "🔴" in light and not reason:
                     raise ValueError("紅燈資料必須填寫 Reason")
                 row = {
