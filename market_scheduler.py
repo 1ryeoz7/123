@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import threading
@@ -10,9 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-import schedule
 import yfinance as yf
 
+_logger = logging.getLogger(__name__)
 _DAILY_MARKET_DATA = {}
 _scheduler_thread = None
 _scheduler_lock = threading.Lock()
@@ -82,15 +83,23 @@ def wrap_market_data(value, source="System", is_cached=False, fetch_time=None, d
 
 
 def _last_close(symbol):
-    history = yf.Ticker(symbol).history(period="5d", interval="1d", auto_adjust=False)
-    if history.empty or history["Close"].dropna().empty:
-        raise ValueError(f"{symbol}: no daily close returned")
-    closes = history["Close"].dropna()
-    value = float(closes.iloc[-1])
-    stamp = history.index[-1].to_pydatetime()
-    if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
-    return value, stamp.astimezone(timezone.utc).isoformat(timespec="seconds")
+    for attempt in range(3):
+        try:
+            history = yf.Ticker(symbol).history(period="5d", interval="1d", auto_adjust=False, timeout=8)
+            if history.empty or history["Close"].dropna().empty:
+                raise ValueError(f"Yahoo 暫時未回傳 {symbol} 的有效日收盤資料")
+            closes = history["Close"].dropna()
+            value = float(closes.iloc[-1])
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{symbol} 回傳的日收盤數值無效")
+            stamp = closes.index[-1].to_pydatetime()
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            return value, stamp.astimezone(timezone.utc).isoformat(timespec="seconds")
+        except Exception:
+            if attempt == 2:
+                raise
+            time.sleep(2)
 
 
 def _cached_or_unavailable(key, cache, fallback, source, note):
@@ -187,7 +196,11 @@ def update_market_data_job():
                 False, market_time, "realtime_api", "最近五個交易日資料中的最後一筆日收盤，不是盤中即時報價",
             )
         except Exception as exc:
-            values[key] = _cached_or_unavailable(key, cache, fallback, f"Yahoo Finance {ticker}", f"抓取失敗：{str(exc)[:100]}")
+            _logger.warning("Market data fetch failed for %s after 3 attempts", ticker, exc_info=True)
+            values[key] = _cached_or_unavailable(
+                key, cache, fallback, f"Yahoo Finance {ticker}",
+                f"本次抓取已嘗試 3 次。原因：{str(exc)[:100]}",
+            )
 
     us_yield = float(values["USD_TWD_US_10Y"]["value"]) / 100.0
     tw_yield = float(os.environ.get("TWD_ANNUAL_RATE", "0.01875"))
@@ -224,11 +237,18 @@ def init_scheduler():
         if _scheduler_thread and _scheduler_thread.is_alive():
             return
         def run_loop():
-            update_market_data_job()
-            schedule.every(30).minutes.do(update_market_data_job)
             while True:
-                schedule.run_pending()
-                time.sleep(1)
+                try:
+                    update_market_data_job()
+                    retry_needed = any(
+                        item.get("is_cached") or item.get("data_type") == "unavailable_fallback"
+                        for item in get_market_data().values()
+                    )
+                    delay = 60 if retry_needed else 30 * 60
+                except Exception:
+                    _logger.exception("Market data refresh failed; retrying in 1 minute")
+                    delay = 60
+                time.sleep(delay)
 
         _scheduler_thread = threading.Thread(target=run_loop, daemon=True, name="market-data-scheduler")
         _scheduler_thread.start()
